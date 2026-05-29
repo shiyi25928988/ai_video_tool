@@ -5,7 +5,28 @@
       "Bash(pnpm install *)",
       "Bash(pnpm approve-builds *)",
       "Bash(pnpm build *)",
-      "Bash(pnpm dev *)"
+      "Bash(pnpm dev *)",
+      "Bash(python *)",
+      "Bash(curl -s http://127.0.0.1:18923/health)",
+      "Bash(kill %1)",
+      "Bash(node -e \"const path = require\\('path'\\); console.log\\('__dirname would be:', path.resolve\\('out/main'\\)\\); console.log\\('sidecar path:', path.resolve\\('out/main', '..', '..', 'sidecar'\\)\\)\")",
+      "Bash(pnpm exec *)",
+      "Bash(timeout 10 pnpm preview)",
+      "Bash(curl -s -X POST http://127.0.0.1:18923/generate_image -H \"Content-Type: application/json\" -d '{\"output_dir\":\"D:/AI_VEDIO_ASSI/ai_video_tool/sidecar/.mock_output\"}')",
+      "Bash(netstat -ano)",
+      "Bash(awk '{print $5}')",
+      "Bash(taskkill //F //PID 25384)",
+      "Bash(taskkill //F //PID 27360)",
+      "Bash(tasklist)",
+      "Bash(ffmpeg -version)",
+      "Bash(cmd.exe /c \"ffmpeg -version\")",
+      "Bash(cmd.exe *)",
+      "Bash(where.exe ffmpeg *)",
+      "Bash(/c/ffmpeg/ffmpeg-2026-05-28-git-7b46c6a2a3-full_build/bin/ffmpeg.exe -version)",
+      "Bash(xxd D:/AI_VEDIO_ASSI/ai_video_tool/start.bat)",
+      "Bash(xxd D:/AI_VEDIO_ASSI/ai_video_tool/build.bat)",
+      "Bash(xxd D:/AI_VEDIO_ASSI/ai_video_tool/clean.bat)",
+      "WebSearch"
     ]
   }
 }

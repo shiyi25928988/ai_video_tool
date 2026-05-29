@@ -7,11 +7,14 @@ echo.
 
 cd /d "%~dp0"
 
-call pnpm install --frozen-lockfile
-if errorlevel 1 (
-    echo [ERROR] pnpm install failed
-    pause
-    exit /b 1
+if not exist "node_modules" (
+    echo [INFO] node_modules not found, installing...
+    call pnpm install
+    if errorlevel 1 (
+        echo [ERROR] pnpm install failed
+        pause
+        exit /b 1
+    )
 )
 
-call npx electron-vite dev
+call pnpm dev

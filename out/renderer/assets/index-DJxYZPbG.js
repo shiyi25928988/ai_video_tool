@@ -7845,14 +7845,131 @@ function ExportPanel() {
   ] }) });
 }
 const api = () => window.electronAPI;
+function ApiKeyInput({ value, onChange, placeholder }) {
+  const [visible, setVisible] = reactExports.useState(false);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        type: visible ? "text" : "password",
+        value,
+        onChange: (e) => onChange(e.target.value),
+        placeholder: placeholder || "sk-...",
+        className: "w-full px-3 py-2 pr-10 bg-dark-900 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => setVisible(!visible),
+        className: "absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-white transition-colors",
+        children: visible ? (
+          // 睁眼图标
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" })
+          ] })
+        ) : (
+          // 闭眼图标
+          /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878l4.242 4.242M21 21l-3.122-3.122" }) })
+        )
+      }
+    )
+  ] });
+}
+const MODEL_PROVIDERS = {
+  textToImage: [
+    {
+      value: "dashscope",
+      label: "阿里百炼 - 北京",
+      baseUrl: "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+      models: ["wan2.7-image-pro", "wan2.1-image-plus", "wanx-v1"]
+    },
+    {
+      value: "dashscope-intl",
+      label: "阿里百炼 - 新加坡",
+      baseUrl: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+      models: ["wan2.7-image-pro", "wan2.1-image-plus", "wanx-v1"]
+    },
+    { value: "comfyui", label: "ComfyUI", baseUrl: "http://127.0.0.1:8188" },
+    { value: "midjourney", label: "Midjourney API" },
+    { value: "custom", label: "自定义" }
+  ],
+  imageToVideo: [
+    {
+      value: "dashscope",
+      label: "阿里百炼 - 北京",
+      baseUrl: "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
+      models: ["wanx2.1-i2v-turbo", "wanx2.1-i2v-plus"]
+    },
+    {
+      value: "dashscope-intl",
+      label: "阿里百炼 - 新加坡",
+      baseUrl: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
+      models: ["wanx2.1-i2v-turbo", "wanx2.1-i2v-plus"]
+    },
+    { value: "kling", label: "快手可灵" },
+    { value: "jimeng", label: "字节即梦" },
+    { value: "custom", label: "自定义" }
+  ],
+  textToVideo: [
+    {
+      value: "dashscope",
+      label: "阿里百炼 - 北京",
+      baseUrl: "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
+      models: ["wanx2.1-t2v-turbo", "wanx2.1-t2v-plus"]
+    },
+    {
+      value: "dashscope-intl",
+      label: "阿里百炼 - 新加坡",
+      baseUrl: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
+      models: ["wanx2.1-t2v-turbo", "wanx2.1-t2v-plus"]
+    },
+    { value: "kling", label: "快手可灵" },
+    { value: "jimeng", label: "字节即梦" },
+    { value: "custom", label: "自定义" }
+  ],
+  tts: [
+    {
+      value: "dashscope",
+      label: "阿里百炼 (CosyVoice) - 北京",
+      baseUrl: "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2speech/generation",
+      models: ["cosyvoice-v1", "sambert"]
+    },
+    {
+      value: "dashscope-intl",
+      label: "阿里百炼 (CosyVoice) - 新加坡",
+      baseUrl: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text2speech/generation",
+      models: ["cosyvoice-v1", "sambert"]
+    },
+    { value: "fishspeech", label: "Fish Speech" },
+    { value: "custom", label: "自定义" }
+  ]
+};
+const AI_SECTIONS = [
+  { id: "textToImage", title: "文生图", desc: "文本描述生成参考图片，如 Stable Diffusion、Midjourney 等" },
+  { id: "imageToVideo", title: "图生视频", desc: "参考图片生成动态视频，如可灵、即梦、Pika 等" },
+  { id: "textToVideo", title: "文生视频", desc: "文本描述直接生成视频，如 Sora、可灵等" },
+  { id: "tts", title: "语音合成 (TTS)", desc: "文本转语音，如 CosyVoice、Azure TTS 等" }
+];
 function SettingsPage() {
-  const [llmProvider, setLlmProvider] = reactExports.useState("claude");
-  const [llmApiKey, setLlmApiKey] = reactExports.useState("");
-  const [llmBaseUrl, setLlmBaseUrl] = reactExports.useState("");
-  const [llmModel, setLlmModel] = reactExports.useState("");
   const [sidecarStatus, setSidecarStatus] = reactExports.useState("未启动");
   const [ffmpegStatus, setFfmpegStatus] = reactExports.useState("检测中...");
-  const [saved, setSaved] = reactExports.useState(false);
+  const [llmConfigs, setLlmConfigs] = reactExports.useState([]);
+  const [llmEditing, setLlmEditing] = reactExports.useState(null);
+  const [llmTesting, setLlmTesting] = reactExports.useState(false);
+  const [llmTestResult, setLlmTestResult] = reactExports.useState(null);
+  const [llmModels, setLlmModels] = reactExports.useState([]);
+  const [llmModelsLoading, setLlmModelsLoading] = reactExports.useState(false);
+  const [aiDetectedModels, setAiDetectedModels] = reactExports.useState({});
+  const [aiModelsLoading, setAiModelsLoading] = reactExports.useState(null);
+  const [aiConfigs, setAiConfigs] = reactExports.useState({
+    textToImage: { provider: "dashscope", apiKey: "", baseUrl: "", modelName: "", saved: false },
+    imageToVideo: { provider: "dashscope", apiKey: "", baseUrl: "", modelName: "", saved: false },
+    textToVideo: { provider: "dashscope", apiKey: "", baseUrl: "", modelName: "", saved: false },
+    tts: { provider: "dashscope", apiKey: "", baseUrl: "", modelName: "", saved: false }
+  });
   reactExports.useEffect(() => {
     if (!api()) {
       setFfmpegStatus("Electron API 不可用");
@@ -7860,110 +7977,309 @@ function SettingsPage() {
     }
     checkFfmpeg();
     checkSidecar();
-    loadLlmConfig();
+    loadLlmConfigs();
+    loadAIModelConfigs();
   }, []);
   const checkFfmpeg = async () => {
     const result = await api().ffmpeg.detect();
     setFfmpegStatus(result.available ? result.version || "可用" : "未安装");
   };
   const checkSidecar = async () => {
-    const result = await api().sidecar.health();
-    setSidecarStatus(result.status === "ok" ? `运行中 (${result.mode})` : "未启动");
+    try {
+      const result = await api().sidecar.health();
+      setSidecarStatus(result.status === "ok" ? `运行中 (${result.mode})` : "未启动");
+    } catch {
+      setSidecarStatus("检测失败");
+    }
   };
-  const loadLlmConfig = async () => {
-    const config = await api().llm.getConfig();
-    if (config) {
-      setLlmProvider(config.provider);
-      setLlmApiKey(config.apiKey || "");
-      setLlmBaseUrl(config.baseUrl || "");
-      setLlmModel(config.model || "");
+  const loadLlmConfigs = async () => {
+    if (!api()) return;
+    try {
+      const list = await api().llm.list();
+      setLlmConfigs(list);
+    } catch (err) {
+      console.error("[LLM] load configs failed:", err);
     }
   };
   const saveLlmConfig = async () => {
-    if (!api()) return;
-    await api().llm.configure({
-      provider: llmProvider,
-      apiKey: llmApiKey,
-      baseUrl: llmBaseUrl || void 0,
-      model: llmModel || void 0
+    if (!api() || !llmEditing) return;
+    if (!llmEditing.name.trim()) {
+      setLlmTestResult({ ok: false, msg: "请填写配置名称" });
+      return;
+    }
+    await api().llm.save({
+      id: llmEditing.id,
+      name: llmEditing.name,
+      baseUrl: llmEditing.baseUrl,
+      apiKey: llmEditing.apiKey,
+      model: llmEditing.model || void 0
     });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2e3);
+    setLlmEditing(null);
+    setLlmTestResult(null);
+    await loadLlmConfigs();
+  };
+  const deleteLlmConfig = async (id) => {
+    if (!api()) return;
+    await api().llm.remove(id);
+    if (llmEditing?.id === id) setLlmEditing(null);
+    await loadLlmConfigs();
+  };
+  const setActiveLlm = async (id) => {
+    if (!api()) return;
+    await api().llm.setActive(id);
+    await loadLlmConfigs();
+  };
+  const startEditLlm = async (id) => {
+    if (!api()) return;
+    setLlmTestResult(null);
+    setLlmModels([]);
+    if (id) {
+      const full = await api().llm.get(id);
+      if (full) {
+        setLlmEditing({ id: full.id, name: full.name, baseUrl: full.baseUrl, apiKey: full.apiKey, model: full.model || "" });
+      }
+    } else {
+      setLlmEditing({ name: "", baseUrl: "", apiKey: "", model: "" });
+    }
+  };
+  const testLlmConfig = async () => {
+    if (!api() || !llmEditing) return;
+    if (!llmEditing.apiKey) {
+      setLlmTestResult({ ok: false, msg: "请先填写 API Key" });
+      return;
+    }
+    setLlmTesting(true);
+    setLlmTestResult(null);
+    try {
+      const res = await api().llm.test({
+        apiKey: llmEditing.apiKey,
+        baseUrl: llmEditing.baseUrl || void 0,
+        model: llmEditing.model || void 0
+      });
+      setLlmTestResult(
+        res.ok ? { ok: true, msg: `模型: ${res.model} | 回复: ${res.reply}` } : { ok: false, msg: res.error }
+      );
+    } catch (err) {
+      setLlmTestResult({ ok: false, msg: err.message });
+    } finally {
+      setLlmTesting(false);
+    }
+  };
+  const fetchLlmModels = async () => {
+    if (!api() || !llmEditing) return;
+    if (!llmEditing.apiKey || !llmEditing.baseUrl) {
+      setLlmTestResult({ ok: false, msg: "请先填写 Base URL 和 API Key" });
+      return;
+    }
+    setLlmModelsLoading(true);
+    setLlmTestResult(null);
+    try {
+      const res = await api().llm.listModels({ apiKey: llmEditing.apiKey, baseUrl: llmEditing.baseUrl });
+      if (res.ok) {
+        setLlmModels(res.models);
+        if (res.models.length === 0) {
+          setLlmTestResult({ ok: false, msg: "未获取到模型列表" });
+        }
+      } else {
+        setLlmTestResult({ ok: false, msg: res.error });
+      }
+    } catch (err) {
+      setLlmTestResult({ ok: false, msg: err.message });
+    } finally {
+      setLlmModelsLoading(false);
+    }
+  };
+  const loadAIModelConfigs = async () => {
+    if (!api()) return;
+    try {
+      const list = await api().aiModel.list();
+      if (!list || !Array.isArray(list)) return;
+      for (const item of list) {
+        if (item.configured) {
+          const full = await api().aiModel.get(item.id);
+          if (full) {
+            setAiConfigs((prev) => ({
+              ...prev,
+              [item.id]: { provider: full.provider || "", apiKey: full.apiKey || "", baseUrl: full.baseUrl || "", modelName: full.modelName || "", saved: true }
+            }));
+          }
+        }
+        const cached = await api().aiModel.getDetected(item.id);
+        if (cached && cached.length > 0) {
+          setAiDetectedModels((prev) => ({ ...prev, [item.id]: cached }));
+        }
+      }
+    } catch (err) {
+      console.error("[AIModel] load configs failed:", err);
+    }
+  };
+  const saveAIConfig = async (id) => {
+    if (!api()) return;
+    const entry = aiConfigs[id];
+    if (!entry) return;
+    await api().aiModel.save(id, { provider: entry.provider, apiKey: entry.apiKey, baseUrl: entry.baseUrl || void 0, modelName: entry.modelName || void 0 });
+    setAiConfigs((prev) => ({ ...prev, [id]: { ...prev[id], saved: true } }));
+    setTimeout(() => {
+      setAiConfigs((prev) => ({ ...prev, [id]: { ...prev[id], saved: false } }));
+    }, 2e3);
+  };
+  const updateAiField = (id, field, value) => {
+    setAiConfigs((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value, saved: false } }));
+  };
+  const fetchAIModels = async (sectionId) => {
+    if (!api()) return;
+    const entry = aiConfigs[sectionId];
+    if (!entry?.apiKey) {
+      alert("请先填写 API Key");
+      return;
+    }
+    setAiModelsLoading(sectionId);
+    try {
+      const res = await api().aiModel.listModels(sectionId, entry.provider, entry.apiKey);
+      if (res.ok && res.models.length > 0) {
+        setAiDetectedModels((prev) => ({ ...prev, [sectionId]: res.models }));
+        if (!entry.modelName || !res.models.includes(entry.modelName)) {
+          updateAiField(sectionId, "modelName", res.models[0]);
+        }
+      } else {
+        alert(res.error || "未获取到模型列表");
+      }
+    } catch (err) {
+      alert(`检测失败: ${err.message}`);
+    } finally {
+      setAiModelsLoading(null);
+    }
+  };
+  const testPing = async () => {
+    try {
+      const result = await api().sidecar.ping();
+      alert(`IPC 连通! ${JSON.stringify(result)}`);
+    } catch (err) {
+      alert(`IPC 失败: ${err.message}`);
+    }
   };
   const startSidecar = async () => {
     if (!api()) return;
     setSidecarStatus("启动中...");
-    const result = await api().sidecar.start();
-    setSidecarStatus(result.ready ? `运行中 (${result.mode})` : `失败: ${result.error || "未知错误"}`);
+    try {
+      const result = await api().sidecar.start();
+      setSidecarStatus(result.ready ? `运行中 (${result.mode})` : `失败: ${result.error || "未知错误"}`);
+    } catch (err) {
+      setSidecarStatus(`异常: ${err.message}`);
+    }
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full overflow-auto p-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-2xl mx-auto space-y-8", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-bold", children: "设置" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "LLM API 配置" }),
+  const onProviderChange = (sectionId, providerValue) => {
+    const presets = MODEL_PROVIDERS[sectionId] || [];
+    const preset = presets.find((p) => p.value === providerValue);
+    setAiDetectedModels((prev) => {
+      const next = { ...prev };
+      delete next[sectionId];
+      return next;
+    });
+    setAiConfigs((prev) => ({
+      ...prev,
+      [sectionId]: {
+        ...prev[sectionId],
+        provider: providerValue,
+        // 自动填充 baseUrl
+        ...preset?.baseUrl ? { baseUrl: preset.baseUrl } : {},
+        // 自动选中第一个模型
+        ...preset?.models?.length ? { modelName: preset.models[0] } : {},
+        saved: false
+      }
+    }));
+  };
+  const renderAISection = (section) => {
+    const entry = aiConfigs[section.id];
+    const providers = MODEL_PROVIDERS[section.id] || [];
+    const currentPreset = providers.find((p) => p.value === entry.provider);
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-1", children: section.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-4", children: section.desc }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "Provider" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
             "select",
             {
-              value: llmProvider,
-              onChange: (e) => setLlmProvider(e.target.value),
+              value: entry.provider,
+              onChange: (e) => onProviderChange(section.id, e.target.value),
               className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white focus:outline-none focus:border-primary-500",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "claude", children: "Anthropic Claude" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "openai", children: "OpenAI GPT" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "custom", children: "自定义 (OpenAI 兼容)" })
-              ]
+              children: providers.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: p.value, children: p.label }, p.value))
             }
           )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "API Key" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              type: "password",
-              value: llmApiKey,
-              onChange: (e) => setLlmApiKey(e.target.value),
-              placeholder: "sk-...",
-              className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
-            }
-          )
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ApiKeyInput, { value: entry.apiKey, onChange: (v) => updateAiField(section.id, "apiKey", v) })
         ] }),
-        llmProvider === "custom" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "Base URL" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "API URL" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "input",
             {
-              value: llmBaseUrl,
-              onChange: (e) => setLlmBaseUrl(e.target.value),
-              placeholder: "http://localhost:11434/v1",
+              value: entry.baseUrl,
+              onChange: (e) => updateAiField(section.id, "baseUrl", e.target.value),
+              placeholder: currentPreset?.baseUrl || "http://localhost:8080/v1",
               className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
             }
           )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "Model (可选)" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              value: llmModel,
-              onChange: (e) => setLlmModel(e.target.value),
-              placeholder: "默认模型",
-              className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "text-sm text-dark-400", children: "模型名称" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => fetchAIModels(section.id),
+                disabled: aiModelsLoading === section.id || !entry.apiKey,
+                className: "text-xs text-primary-400 hover:text-primary-300 disabled:opacity-50 transition-colors",
+                children: aiModelsLoading === section.id ? "检测中..." : "检测模型"
+              }
+            )
+          ] }),
+          (() => {
+            const detected = aiDetectedModels[section.id] || [];
+            const allModels = [.../* @__PURE__ */ new Set([...detected, ...currentPreset?.models || []])];
+            if (allModels.length > 0) {
+              return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "select",
+                {
+                  value: entry.modelName,
+                  onChange: (e) => updateAiField(section.id, "modelName", e.target.value),
+                  className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white focus:outline-none focus:border-primary-500",
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "-- 请选择模型 --" }),
+                    allModels.map((m) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: m, children: m }, m)),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "__custom__", children: "自定义..." })
+                  ]
+                }
+              );
             }
-          )
+            return /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                value: entry.modelName,
+                onChange: (e) => updateAiField(section.id, "modelName", e.target.value),
+                placeholder: "默认模型",
+                className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+              }
+            );
+          })()
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
-            onClick: saveLlmConfig,
+            onClick: () => saveAIConfig(section.id),
             className: "px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-white font-medium transition-colors",
-            children: saved ? "已保存" : "保存 LLM 配置"
+            children: entry.saved ? "已保存" : `保存${section.title}配置`
           }
         )
       ] })
-    ] }),
+    ] }, section.id);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full overflow-auto p-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-2xl mx-auto space-y-8", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-bold", children: "设置" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "Python Sidecar" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
@@ -7971,16 +8287,170 @@ function SettingsPage() {
           "状态: ",
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-white", children: sidecarStatus })
         ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            onClick: startSidecar,
-            className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors",
-            children: "启动 Sidecar"
-          }
-        )
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: testPing, className: "px-3 py-2 bg-dark-600 hover:bg-dark-500 rounded-lg text-white text-sm transition-colors", children: "测试连接" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: startSidecar, className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors", children: "启动 Sidecar" })
+        ] })
       ] })
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-1", children: "LLM API 配置" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-4", children: "支持多条 OpenAI 兼容端点，勾选激活要使用的一条。" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 mb-4", children: [
+        llmConfigs.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-500 text-sm py-2", children: "暂无配置，请点击下方添加。" }),
+        llmConfigs.map((c) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: `flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${c.isActive ? "bg-primary-900/20 border-primary-600" : "bg-dark-900 border-dark-700 hover:border-dark-500"}`,
+            onClick: () => setActiveLlm(c.id),
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${c.isActive ? "border-primary-500" : "border-dark-500"}`, children: c.isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2 h-2 rounded-full bg-primary-500" }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-white", children: c.name }),
+                  c.isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs px-1.5 py-0.5 rounded bg-primary-600/30 text-primary-400", children: "使用中" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-xs text-dark-400 truncate mt-0.5", children: [
+                  c.baseUrl || "(默认)",
+                  " ",
+                  c.model && `· ${c.model}`
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1 flex-shrink-0", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: (e) => {
+                      e.stopPropagation();
+                      startEditLlm(c.id);
+                    },
+                    className: "px-2 py-1 text-xs bg-dark-700 hover:bg-dark-600 rounded text-dark-300 transition-colors",
+                    children: "编辑"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "button",
+                  {
+                    onClick: (e) => {
+                      e.stopPropagation();
+                      deleteLlmConfig(c.id);
+                    },
+                    className: "px-2 py-1 text-xs bg-dark-700 hover:bg-red-900/50 rounded text-dark-300 hover:text-red-400 transition-colors",
+                    children: "删除"
+                  }
+                )
+              ] })
+            ]
+          },
+          c.id
+        ))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: () => startEditLlm(),
+          className: "w-full px-4 py-2 border-2 border-dashed border-dark-600 hover:border-primary-600 rounded-lg text-dark-400 hover:text-primary-400 text-sm transition-colors",
+          children: "+ 添加 LLM 配置"
+        }
+      ),
+      llmEditing && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 p-4 bg-dark-900 rounded-lg border border-dark-600 space-y-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "名称" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              value: llmEditing.name,
+              onChange: (e) => setLlmEditing({ ...llmEditing, name: e.target.value }),
+              placeholder: "如 OpenAI、DeepSeek、Ollama",
+              className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "Base URL" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              value: llmEditing.baseUrl,
+              onChange: (e) => setLlmEditing({ ...llmEditing, baseUrl: e.target.value }),
+              placeholder: "https://api.openai.com/v1",
+              className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "API Key" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ApiKeyInput, { value: llmEditing.apiKey, onChange: (v) => setLlmEditing({ ...llmEditing, apiKey: v }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "text-sm text-dark-400", children: "Model" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: fetchLlmModels,
+                disabled: llmModelsLoading,
+                className: "text-xs text-primary-400 hover:text-primary-300 disabled:opacity-50 transition-colors",
+                children: llmModelsLoading ? "检测中..." : "检测模型"
+              }
+            )
+          ] }),
+          llmModels.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "select",
+            {
+              value: llmEditing.model,
+              onChange: (e) => setLlmEditing({ ...llmEditing, model: e.target.value }),
+              className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white focus:outline-none focus:border-primary-500",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "-- 请选择模型 --" }),
+                llmModels.map((m) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: m, children: m }, m))
+              ]
+            }
+          ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              value: llmEditing.model,
+              onChange: (e) => setLlmEditing({ ...llmEditing, model: e.target.value }),
+              placeholder: "gpt-4o、deepseek-chat 等（可点击上方检测）",
+              className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: saveLlmConfig,
+              className: "px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-white font-medium transition-colors text-sm",
+              children: "保存"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: testLlmConfig,
+              disabled: llmTesting,
+              className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 disabled:opacity-50 rounded-lg text-white font-medium transition-colors text-sm",
+              children: llmTesting ? "测试中..." : "测试连接"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: () => {
+                setLlmEditing(null);
+                setLlmTestResult(null);
+                setLlmModels([]);
+              },
+              className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-300 transition-colors text-sm",
+              children: "取消"
+            }
+          )
+        ] }),
+        llmTestResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `text-sm px-3 py-2 rounded-lg ${llmTestResult.ok ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`, children: llmTestResult.msg })
+      ] })
+    ] }),
+    AI_SECTIONS.map((section) => renderAISection(section)),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "FFmpeg" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-dark-400 text-sm", children: [

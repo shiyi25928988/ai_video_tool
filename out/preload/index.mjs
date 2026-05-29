@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+console.log("[Preload] Loading preload script...");
 const electronAPI = {
   // ─ App ─────────────────────────────────────────────────
   app: {
@@ -26,8 +27,13 @@ const electronAPI = {
   },
   // ─ LLM ─────────────────────────────────────────────────
   llm: {
-    configure: (config) => ipcRenderer.invoke("llm:configure", config),
-    getConfig: () => ipcRenderer.invoke("llm:get-config")
+    list: () => ipcRenderer.invoke("llm:list"),
+    get: (id) => ipcRenderer.invoke("llm:get", id),
+    save: (entry) => ipcRenderer.invoke("llm:save", entry),
+    remove: (id) => ipcRenderer.invoke("llm:remove", id),
+    setActive: (id) => ipcRenderer.invoke("llm:set-active", id),
+    test: (config) => ipcRenderer.invoke("llm:test", config),
+    listModels: (config) => ipcRenderer.invoke("llm:list-models", config)
   },
   // ─ Pipeline ────────────────────────────────────────────
   pipeline: {
@@ -76,8 +82,17 @@ const electronAPI = {
     setActive: (id) => ipcRenderer.invoke("provider:set-active", id),
     remove: (id) => ipcRenderer.invoke("provider:remove", id)
   },
+  // ─ AI Model Config ────────────────────────────────────
+  aiModel: {
+    list: () => ipcRenderer.invoke("ai-model:list"),
+    get: (id) => ipcRenderer.invoke("ai-model:get", id),
+    save: (id, config) => ipcRenderer.invoke("ai-model:save", id, config),
+    listModels: (sectionId, provider, apiKey) => ipcRenderer.invoke("ai-model:list-models", sectionId, provider, apiKey),
+    getDetected: (sectionId) => ipcRenderer.invoke("ai-model:get-detected", sectionId)
+  },
   // ─ Sidecar ─────────────────────────────────────────────
   sidecar: {
+    ping: () => ipcRenderer.invoke("sidecar:ping"),
     start: (pythonCmd) => ipcRenderer.invoke("sidecar:start", pythonCmd),
     health: () => ipcRenderer.invoke("sidecar:health"),
     stop: () => ipcRenderer.invoke("sidecar:stop")
@@ -94,3 +109,4 @@ const electronAPI = {
   }
 };
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);
+console.log("[Preload] electronAPI exposed to main world");

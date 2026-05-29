@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import { app, safeStorage, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { join, dirname } from "path";
 import { is } from "@electron-toolkit/utils";
 import { promises, existsSync, mkdirSync, appendFileSync } from "fs";
 import { randomUUID } from "crypto";
 import { spawn, execFile } from "child_process";
 import { EventEmitter } from "events";
+import { createServer } from "net";
 import __cjs_mod__ from "node:module";
 const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
@@ -149,10 +150,66 @@ class PythonSpawner extends EventEmitter {
   process = null;
   port = 18923;
   ready = false;
+  /** 检测端口是否被占用 */
+  async isPortInUse(port) {
+    return new Promise((resolve) => {
+      const server = createServer();
+      server.once("error", () => resolve(true));
+      server.once("listening", () => {
+        server.close();
+        resolve(false);
+      });
+      server.listen(port, "127.0.0.1");
+    });
+  }
+  /** 尝试连接已有的 sidecar */
+  async tryConnectExisting() {
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.port}/health`, {
+        signal: AbortSignal.timeout(2e3)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "ok") {
+          this.ready = true;
+          return { port: this.port, mode: data.mode || "mock", ready: true };
+        }
+      }
+    } catch {
+    }
+    return null;
+  }
   /** 启动 Python Sidecar */
   async start(pythonCmd = "python") {
-    const sidecarDir = join(__dirname, "..", "..", "sidecar");
-    const script = join(sidecarDir, "main.py");
+    if (this.ready && this.process) {
+      const existing = await this.tryConnectExisting();
+      if (existing) return existing;
+    }
+    const portBusy = await this.isPortInUse(this.port);
+    if (portBusy) {
+      const existing = await this.tryConnectExisting();
+      if (existing) {
+        console.log("[PythonSpawner] 检测到已有 sidecar 运行，复用连接");
+        return existing;
+      }
+      throw new Error(`端口 ${this.port} 已被其他进程占用，请先关闭该进程或更换端口`);
+    }
+    const candidates = [
+      join(__dirname, "..", "..", "sidecar", "main.py"),
+      // out/main/ → 项目根
+      join(__dirname, "..", "sidecar", "main.py"),
+      // 一级上
+      join(process.cwd(), "sidecar", "main.py")
+      // 工作目录
+    ];
+    const script = candidates.find((p) => existsSync(p));
+    if (!script) {
+      throw new Error(
+        `找不到 sidecar/main.py，已尝试路径:
+${candidates.join("\n")}`
+      );
+    }
+    console.log(`[PythonSpawner] script=${script}, pythonCmd=${pythonCmd}`);
     return new Promise((resolve, reject) => {
       this.process = spawn(pythonCmd, [script], {
         env: {
@@ -162,6 +219,7 @@ class PythonSpawner extends EventEmitter {
         stdio: ["pipe", "pipe", "pipe"]
       });
       let stdoutBuf = "";
+      let stderrBuf = "";
       this.process.stdout?.on("data", (data) => {
         stdoutBuf += data.toString();
         if (!this.ready && stdoutBuf.includes('"ready"')) {
@@ -183,15 +241,23 @@ class PythonSpawner extends EventEmitter {
         }
       });
       this.process.stderr?.on("data", (data) => {
-        console.error("[Sidecar stderr]", data.toString());
+        const msg = data.toString();
+        stderrBuf += msg;
+        console.error("[Sidecar stderr]", msg);
       });
       this.process.on("error", (err) => {
         this.emit("error", err);
         if (!this.ready) reject(err);
       });
+      let wasReady = false;
       this.process.on("exit", (code) => {
+        if (this.ready) wasReady = true;
         this.ready = false;
         this.emit("exit", code);
+        if (!wasReady && code !== 0) {
+          const hint = stderrBuf.includes("ModuleNotFoundError") ? "Python 缺少依赖，请运行: pip install -r sidecar/requirements.txt" : stderrBuf.includes("Address already in use") ? `端口 ${this.port} 已被占用` : `请检查 Python 和依赖是否已安装`;
+          reject(new Error(`Python sidecar 退出 (code ${code}): ${hint}`));
+        }
       });
       setTimeout(() => {
         if (!this.ready) {
@@ -214,11 +280,25 @@ class PythonSpawner extends EventEmitter {
     }
     return res.json();
   }
-  /** 健康检查 */
+  /** 健康检查 — 主动探测端口，不管 this.ready 状态 */
   async healthCheck() {
-    if (!this.ready) return { status: "not_ready" };
-    const res = await fetch(`http://127.0.0.1:${this.port}/health`);
-    return res.json();
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.port}/health`, {
+        signal: AbortSignal.timeout(3e3)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "ok") {
+          this.ready = true;
+        }
+        return data;
+      }
+      this.ready = false;
+      return { status: "unhealthy" };
+    } catch {
+      this.ready = false;
+      return { status: "not_running" };
+    }
   }
   /** 停止 Sidecar */
   stop() {
@@ -724,11 +804,11 @@ class Logger {
 }
 const logger = new Logger();
 class PipelineRunner extends EventEmitter {
-  constructor(projectManager2, sidecar, llmConfig2, concurrency = 2) {
+  constructor(projectManager2, sidecar, llmConfig, concurrency = 2) {
     super();
     this.projectManager = projectManager2;
     this.sidecar = sidecar;
-    this.llmConfig = llmConfig2;
+    this.llmConfig = llmConfig;
     this.concurrency = concurrency;
   }
   paused = false;
@@ -1269,12 +1349,240 @@ ${stderr}`));
     });
   }
 }
+class SecureStorage {
+  get storePath() {
+    return join(app.getPath("userData"), "secure_keys.enc");
+  }
+  /** 加密并保存一个 key-value */
+  async set(key, value) {
+    const all = await this.loadAll();
+    if (safeStorage.isEncryptionAvailable()) {
+      all[key] = safeStorage.encryptString(value).toString("base64");
+    } else {
+      all[key] = Buffer.from(value).toString("base64");
+    }
+    await promises.writeFile(this.storePath, JSON.stringify(all), "utf-8");
+  }
+  /** 读取并解密一个 key */
+  async get(key) {
+    const all = await this.loadAll();
+    const encoded = all[key];
+    if (!encoded) return null;
+    if (safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(Buffer.from(encoded, "base64"));
+    } else {
+      return Buffer.from(encoded, "base64").toString("utf-8");
+    }
+  }
+  /** 删除一个 key */
+  async delete(key) {
+    const all = await this.loadAll();
+    delete all[key];
+    await promises.writeFile(this.storePath, JSON.stringify(all), "utf-8");
+  }
+  /** 加载所有存储的 key */
+  async loadAll() {
+    try {
+      const data = await promises.readFile(this.storePath, "utf-8");
+      return JSON.parse(data);
+    } catch {
+      return {};
+    }
+  }
+}
+const MODEL_LABELS = {
+  textToImage: "文生图",
+  imageToVideo: "图生视频",
+  textToVideo: "文生视频",
+  tts: "语音合成 (TTS)"
+};
+const AI_MODEL_IDS = ["textToImage", "imageToVideo", "textToVideo", "tts"];
+class AIModelConfigManager {
+  static instance;
+  secureStorage = new SecureStorage();
+  models = {};
+  static getInstance() {
+    if (!this.instance) this.instance = new AIModelConfigManager();
+    return this.instance;
+  }
+  get configPath() {
+    return join(app.getPath("userData"), "ai-models.json");
+  }
+  /** 启动时加载配置 */
+  async load() {
+    try {
+      const data = await promises.readFile(this.configPath, "utf-8");
+      const file = JSON.parse(data);
+      this.models = file.models || {};
+    } catch {
+      this.models = {};
+    }
+  }
+  /** 保存非敏感字段到 JSON 文件 */
+  async saveFile() {
+    const file = { models: this.models };
+    await promises.writeFile(this.configPath, JSON.stringify(file, null, 2), "utf-8");
+  }
+  /** 保存单个模型配置 */
+  async save(id, config) {
+    this.models[id] = {
+      provider: config.provider,
+      baseUrl: config.baseUrl,
+      modelName: config.modelName
+    };
+    await this.saveFile();
+    if (config.apiKey) {
+      await this.secureStorage.set(`ai-model:${id}:apiKey`, config.apiKey);
+    } else {
+      await this.secureStorage.delete(`ai-model:${id}:apiKey`);
+    }
+  }
+  /** 获取单个模型完整配置（含解密的 apiKey） */
+  async get(id) {
+    const partial = this.models[id];
+    if (!partial) return null;
+    const apiKey = await this.secureStorage.get(`ai-model:${id}:apiKey`) || "";
+    return { ...partial, apiKey };
+  }
+  /** 保存检测到的模型列表 */
+  async saveDetectedModels(id, models) {
+    if (!this.models[id]) return;
+    this.models[id].detectedModels = models;
+    await this.saveFile();
+  }
+  /** 获取检测到的模型列表 */
+  getDetectedModels(id) {
+    return this.models[id]?.detectedModels || [];
+  }
+  /** 获取所有模型摘要（脱敏，用于列表展示） */
+  async getAll() {
+    return AI_MODEL_IDS.map((id) => {
+      const partial = this.models[id];
+      return {
+        id,
+        label: MODEL_LABELS[id],
+        configured: !!partial?.provider,
+        provider: partial?.provider || "",
+        modelName: partial?.modelName || ""
+      };
+    });
+  }
+}
+class LLMConfigManager {
+  static instance;
+  secureStorage = new SecureStorage();
+  configs = /* @__PURE__ */ new Map();
+  activeId = "";
+  static getInstance() {
+    if (!this.instance) this.instance = new LLMConfigManager();
+    return this.instance;
+  }
+  get configPath() {
+    return join(app.getPath("userData"), "llm-configs.json");
+  }
+  /** 启动时加载配置 */
+  async load() {
+    try {
+      const data = await promises.readFile(this.configPath, "utf-8");
+      const file = JSON.parse(data);
+      this.configs.clear();
+      for (const c of file.configs || []) {
+        this.configs.set(c.id, c);
+        if (c.isActive) this.activeId = c.id;
+      }
+    } catch {
+    }
+  }
+  /** 保存到文件 */
+  async saveFile() {
+    const file = {
+      configs: Array.from(this.configs.values())
+    };
+    await promises.writeFile(this.configPath, JSON.stringify(file, null, 2), "utf-8");
+  }
+  /** 获取所有配置摘要（脱敏） */
+  list() {
+    return Array.from(this.configs.values()).map((c) => ({
+      id: c.id,
+      name: c.name,
+      baseUrl: c.baseUrl,
+      model: c.model || "",
+      isActive: c.id === this.activeId
+    }));
+  }
+  /** 获取单个配置（含解密的 apiKey） */
+  async get(id) {
+    const c = this.configs.get(id);
+    if (!c) return null;
+    const apiKey = await this.secureStorage.get(`llm:${id}:apiKey`) || "";
+    return { ...c, apiKey };
+  }
+  /** 获取当前激活的配置（供管线使用） */
+  async getActive() {
+    if (!this.activeId) return null;
+    const entry = await this.get(this.activeId);
+    if (!entry) return null;
+    return {
+      provider: "custom",
+      apiKey: entry.apiKey,
+      baseUrl: entry.baseUrl || void 0,
+      model: entry.model || void 0
+    };
+  }
+  /** 新增/更新配置 */
+  async save(entry) {
+    const id = entry.id || randomUUID();
+    const isFirst = this.configs.size === 0;
+    this.configs.set(id, {
+      id,
+      name: entry.name,
+      baseUrl: entry.baseUrl,
+      model: entry.model,
+      hasApiKey: !!entry.apiKey,
+      isActive: isFirst
+      // 第一条自动激活
+    });
+    if (entry.apiKey) {
+      await this.secureStorage.set(`llm:${id}:apiKey`, entry.apiKey);
+    }
+    if (isFirst) this.activeId = id;
+    await this.saveFile();
+    return id;
+  }
+  /** 删除配置 */
+  async remove(id) {
+    this.configs.delete(id);
+    await this.secureStorage.delete(`llm:${id}:apiKey`);
+    if (this.activeId === id) {
+      const first = this.configs.keys().next().value;
+      this.activeId = first || "";
+      if (first) {
+        const c = this.configs.get(first);
+        this.configs.set(first, { ...c, isActive: true });
+      }
+    }
+    await this.saveFile();
+  }
+  /** 设置激活配置 */
+  async setActive(id) {
+    if (!this.configs.has(id)) throw new Error(`LLM config ${id} not found`);
+    if (this.activeId && this.configs.has(this.activeId)) {
+      const old = this.configs.get(this.activeId);
+      this.configs.set(this.activeId, { ...old, isActive: false });
+    }
+    this.activeId = id;
+    const c = this.configs.get(id);
+    this.configs.set(id, { ...c, isActive: true });
+    await this.saveFile();
+  }
+}
 let mainWindow = null;
 const projectManager = new ProjectManager();
 const pythonSpawner = new PythonSpawner();
 const providerRegistry = VideoProviderRegistry.getInstance();
 const ffmpegController = new FFmpegController();
-let llmConfig = null;
+const aiModelConfig = AIModelConfigManager.getInstance();
+const llmConfigManager = LLMConfigManager.getInstance();
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -1284,7 +1592,7 @@ function createWindow() {
     show: false,
     title: "Video AI Studio",
     webPreferences: {
-      preload: join(__dirname, "../preload/index.js"),
+      preload: join(__dirname, "../preload/index.mjs"),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -1307,6 +1615,8 @@ app.whenReady().then(async () => {
   createWindow();
   registerIPC();
   await providerRegistry.load();
+  await aiModelConfig.load();
+  await llmConfigManager.load();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -1343,6 +1653,7 @@ function registerIPC() {
     return { ok: true };
   });
   ipcMain.handle("script:generate", async (event, userInput, style) => {
+    const llmConfig = await llmConfigManager.getActive();
     if (!llmConfig) throw new Error("LLM not configured. Please set API key in Settings.");
     const optimizer = new ScriptOptimizer(llmConfig);
     optimizer.on("progress", (p) => {
@@ -1351,6 +1662,7 @@ function registerIPC() {
     return optimizer.generateFullScript(userInput, style || "anime");
   });
   ipcMain.handle("script:generate-layer", async (event, layer, input, style) => {
+    const llmConfig = await llmConfigManager.getActive();
     if (!llmConfig) throw new Error("LLM not configured.");
     const optimizer = new ScriptOptimizer(llmConfig);
     optimizer.on("progress", (p) => {
@@ -1369,14 +1681,61 @@ function registerIPC() {
         throw new Error(`Unknown layer: ${layer}`);
     }
   });
-  ipcMain.handle("llm:configure", async (_e, config) => {
-    llmConfig = config;
+  ipcMain.handle("llm:list", () => {
+    return llmConfigManager.list();
+  });
+  ipcMain.handle("llm:save", async (_e, entry) => {
+    const id = await llmConfigManager.save(entry);
+    return { ok: true, id };
+  });
+  ipcMain.handle("llm:remove", async (_e, id) => {
+    await llmConfigManager.remove(id);
     return { ok: true };
   });
-  ipcMain.handle("llm:get-config", () => {
-    return llmConfig;
+  ipcMain.handle("llm:set-active", async (_e, id) => {
+    await llmConfigManager.setActive(id);
+    return { ok: true };
+  });
+  ipcMain.handle("llm:get", async (_e, id) => {
+    return llmConfigManager.get(id);
+  });
+  ipcMain.handle("llm:list-models", async (_e, config) => {
+    try {
+      const url = (config.baseUrl || "https://api.openai.com").replace(/\/$/, "") + "/v1/models";
+      const res = await fetch(url, {
+        headers: { "Authorization": `Bearer ${config.apiKey}` },
+        signal: AbortSignal.timeout(1e4)
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        return { ok: false, error: `HTTP ${res.status}: ${errText}` };
+      }
+      const data = await res.json();
+      const models = (data.data || []).map((m) => m.id).filter((id) => typeof id === "string").sort();
+      return { ok: true, models };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  ipcMain.handle("llm:test", async (_e, config) => {
+    try {
+      const client = new LLMClient({
+        provider: "custom",
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.model
+      });
+      const res = await client.chat(
+        [{ role: "user", content: '请回复"连接成功"两个字。' }],
+        { maxTokens: 32 }
+      );
+      return { ok: true, reply: res.content.trim(), model: config.model || "(默认)" };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   });
   ipcMain.handle("pipeline:start", async (_e, config) => {
+    const llmConfig = await llmConfigManager.getActive();
     if (!llmConfig) throw new Error("LLM not configured");
     const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, config?.concurrency || 2);
     runner.on("phase:change", (phase) => mainWindow?.webContents.send("pipeline:phase", phase));
@@ -1412,11 +1771,19 @@ function registerIPC() {
     await providerRegistry.remove(id);
     return { ok: true };
   });
+  ipcMain.handle("sidecar:ping", () => {
+    console.log("[IPC] sidecar:ping called");
+    return { pong: true, time: (/* @__PURE__ */ new Date()).toISOString() };
+  });
   ipcMain.handle("sidecar:start", async (_e, pythonCmd) => {
     try {
+      console.log("[IPC] sidecar:start called, pythonCmd=", pythonCmd);
+      logger.info("Starting sidecar...");
       const info = await pythonSpawner.start(pythonCmd || "python");
+      logger.info("Sidecar started:", JSON.stringify(info));
       return info;
     } catch (err) {
+      logger.error("Sidecar start failed:", err.message);
       return { error: err.message, ready: false };
     }
   });
@@ -1426,6 +1793,50 @@ function registerIPC() {
   ipcMain.handle("sidecar:stop", () => {
     pythonSpawner.stop();
     return { stopped: true };
+  });
+  ipcMain.handle("ai-model:list", async () => {
+    return aiModelConfig.getAll();
+  });
+  ipcMain.handle("ai-model:get", async (_e, id) => {
+    return aiModelConfig.get(id);
+  });
+  ipcMain.handle("ai-model:save", async (_e, id, config) => {
+    await aiModelConfig.save(id, config);
+    return { ok: true };
+  });
+  const AI_MODEL_ENDPOINTS = {
+    "dashscope": async (apiKey) => {
+      const res = await fetch("https://dashscope.aliyuncs.com/compatible-mode/v1/models", {
+        headers: { "Authorization": `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(1e4)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return (data.data || []).map((m) => m.id).filter(Boolean).sort();
+    },
+    "dashscope-intl": async (apiKey) => {
+      const res = await fetch("https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models", {
+        headers: { "Authorization": `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(1e4)
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return (data.data || []).map((m) => m.id).filter(Boolean).sort();
+    }
+  };
+  ipcMain.handle("ai-model:list-models", async (_e, sectionId, provider, apiKey) => {
+    try {
+      const fetcher = AI_MODEL_ENDPOINTS[provider];
+      if (!fetcher) return { ok: false, error: `Provider "${provider}" 暂不支持在线检测模型` };
+      const models = await fetcher(apiKey);
+      await aiModelConfig.saveDetectedModels(sectionId, models);
+      return { ok: true, models };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  ipcMain.handle("ai-model:get-detected", (_e, sectionId) => {
+    return aiModelConfig.getDetectedModels(sectionId);
   });
   ipcMain.handle("ffmpeg:detect", async () => {
     return ffmpegController.detect();

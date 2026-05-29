@@ -1,0 +1,2 @@
+# 确保 Windows 批处理文件保持 CRLF 换行符
+*.bat text eol=crlf

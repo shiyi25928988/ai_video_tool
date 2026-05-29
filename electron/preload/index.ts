@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+console.log('[Preload] Loading preload script...')
+
 const electronAPI = {
   // ─ App ─────────────────────────────────────────────────
   app: {
@@ -34,9 +36,16 @@ const electronAPI = {
 
   // ─ LLM ─────────────────────────────────────────────────
   llm: {
-    configure: (config: { provider: string; apiKey: string; baseUrl?: string; model?: string }) =>
-      ipcRenderer.invoke('llm:configure', config),
-    getConfig: () => ipcRenderer.invoke('llm:get-config'),
+    list: () => ipcRenderer.invoke('llm:list'),
+    get: (id: string) => ipcRenderer.invoke('llm:get', id),
+    save: (entry: { id?: string; name: string; baseUrl: string; apiKey: string; model?: string }) =>
+      ipcRenderer.invoke('llm:save', entry),
+    remove: (id: string) => ipcRenderer.invoke('llm:remove', id),
+    setActive: (id: string) => ipcRenderer.invoke('llm:set-active', id),
+    test: (config: { apiKey: string; baseUrl?: string; model?: string }) =>
+      ipcRenderer.invoke('llm:test', config),
+    listModels: (config: { apiKey: string; baseUrl?: string }) =>
+      ipcRenderer.invoke('llm:list-models', config),
   },
 
   // ─ Pipeline ────────────────────────────────────────────
@@ -89,8 +98,21 @@ const electronAPI = {
     remove: (id: string) => ipcRenderer.invoke('provider:remove', id),
   },
 
+  // ─ AI Model Config ────────────────────────────────────
+  aiModel: {
+    list: () => ipcRenderer.invoke('ai-model:list'),
+    get: (id: string) => ipcRenderer.invoke('ai-model:get', id),
+    save: (id: string, config: { provider: string; apiKey: string; baseUrl?: string; modelName?: string }) =>
+      ipcRenderer.invoke('ai-model:save', id, config),
+    listModels: (sectionId: string, provider: string, apiKey: string) =>
+      ipcRenderer.invoke('ai-model:list-models', sectionId, provider, apiKey),
+    getDetected: (sectionId: string) =>
+      ipcRenderer.invoke('ai-model:get-detected', sectionId),
+  },
+
   // ─ Sidecar ─────────────────────────────────────────────
   sidecar: {
+    ping: () => ipcRenderer.invoke('sidecar:ping'),
     start: (pythonCmd?: string) => ipcRenderer.invoke('sidecar:start', pythonCmd),
     health: () => ipcRenderer.invoke('sidecar:health'),
     stop: () => ipcRenderer.invoke('sidecar:stop'),
@@ -111,5 +133,6 @@ const electronAPI = {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI)
+console.log('[Preload] electronAPI exposed to main world')
 
 export type ElectronAPI = typeof electronAPI

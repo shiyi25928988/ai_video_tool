@@ -7,17 +7,18 @@ import { PipelineRunner } from './pipeline-runner'
 import { VideoProviderRegistry } from './providers/registry'
 import { FFmpegController } from './ffmpeg-controller'
 import { ScriptOptimizer } from './script-optimizer/optimizer'
+import { LLMClient } from './script-optimizer/llm-client'
+import { AIModelConfigManager } from './ai-model-config'
+import { LLMConfigManager } from './llm-config-manager'
 import { logger } from './utils/logger'
-import type { LLMConfig } from './script-optimizer/types'
 
 let mainWindow: BrowserWindow | null = null
 const projectManager = new ProjectManager()
 const pythonSpawner = new PythonSpawner()
 const providerRegistry = VideoProviderRegistry.getInstance()
 const ffmpegController = new FFmpegController()
-
-// LLM 配置存储
-let llmConfig: LLMConfig | null = null
+const aiModelConfig = AIModelConfigManager.getInstance()
+const llmConfigManager = LLMConfigManager.getInstance()
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -28,7 +29,7 @@ function createWindow(): void {
     show: false,
     title: 'Video AI Studio',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -57,6 +58,8 @@ app.whenReady().then(async () => {
   createWindow()
   registerIPC()
   await providerRegistry.load()
+  await aiModelConfig.load()
+  await llmConfigManager.load()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -112,6 +115,7 @@ function registerIPC(): void {
   // ─ Script Optimizer ──────────────────────────────────────
 
   ipcMain.handle('script:generate', async (event, userInput: string, style?: string) => {
+    const llmConfig = await llmConfigManager.getActive()
     if (!llmConfig) throw new Error('LLM not configured. Please set API key in Settings.')
     const optimizer = new ScriptOptimizer(llmConfig)
 
@@ -123,6 +127,7 @@ function registerIPC(): void {
   })
 
   ipcMain.handle('script:generate-layer', async (event, layer: number, input: unknown, style?: string) => {
+    const llmConfig = await llmConfigManager.getActive()
     if (!llmConfig) throw new Error('LLM not configured.')
     const optimizer = new ScriptOptimizer(llmConfig)
 
@@ -141,18 +146,73 @@ function registerIPC(): void {
 
   // ─ LLM Config ────────────────────────────────────────────
 
-  ipcMain.handle('llm:configure', async (_e, config: LLMConfig) => {
-    llmConfig = config
+  ipcMain.handle('llm:list', () => {
+    return llmConfigManager.list()
+  })
+
+  ipcMain.handle('llm:save', async (_e, entry: { id?: string; name: string; baseUrl: string; apiKey: string; model?: string }) => {
+    const id = await llmConfigManager.save(entry)
+    return { ok: true, id }
+  })
+
+  ipcMain.handle('llm:remove', async (_e, id: string) => {
+    await llmConfigManager.remove(id)
     return { ok: true }
   })
 
-  ipcMain.handle('llm:get-config', () => {
-    return llmConfig
+  ipcMain.handle('llm:set-active', async (_e, id: string) => {
+    await llmConfigManager.setActive(id)
+    return { ok: true }
+  })
+
+  ipcMain.handle('llm:get', async (_e, id: string) => {
+    return llmConfigManager.get(id)
+  })
+
+  ipcMain.handle('llm:list-models', async (_e, config: { apiKey: string; baseUrl?: string }) => {
+    try {
+      const url = (config.baseUrl || 'https://api.openai.com').replace(/\/$/, '') + '/v1/models'
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${config.apiKey}` },
+        signal: AbortSignal.timeout(10000),
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        return { ok: false, error: `HTTP ${res.status}: ${errText}` }
+      }
+      const data = await res.json() as any
+      const models = (data.data || [])
+        .map((m: any) => m.id)
+        .filter((id: string) => typeof id === 'string')
+        .sort()
+      return { ok: true, models }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('llm:test', async (_e, config: { apiKey: string; baseUrl?: string; model?: string }) => {
+    try {
+      const client = new LLMClient({
+        provider: 'custom',
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.model,
+      })
+      const res = await client.chat(
+        [{ role: 'user', content: '请回复"连接成功"两个字。' }],
+        { maxTokens: 32 }
+      )
+      return { ok: true, reply: res.content.trim(), model: config.model || '(默认)' }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
   })
 
   // ─ Pipeline ──────────────────────────────────────────────
 
   ipcMain.handle('pipeline:start', async (_e, config?: { concurrency?: number }) => {
+    const llmConfig = await llmConfigManager.getActive()
     if (!llmConfig) throw new Error('LLM not configured')
     const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, config?.concurrency || 2)
 
@@ -204,11 +264,21 @@ function registerIPC(): void {
 
   // ─ Sidecar ───────────────────────────────────────────────
 
+  // 简单的 IPC 连通性测试
+  ipcMain.handle('sidecar:ping', () => {
+    console.log('[IPC] sidecar:ping called')
+    return { pong: true, time: new Date().toISOString() }
+  })
+
   ipcMain.handle('sidecar:start', async (_e, pythonCmd?: string) => {
     try {
+      console.log('[IPC] sidecar:start called, pythonCmd=', pythonCmd)
+      logger.info('Starting sidecar...')
       const info = await pythonSpawner.start(pythonCmd || 'python')
+      logger.info('Sidecar started:', JSON.stringify(info))
       return info
     } catch (err) {
+      logger.error('Sidecar start failed:', (err as Error).message)
       return { error: (err as Error).message, ready: false }
     }
   })
@@ -220,6 +290,60 @@ function registerIPC(): void {
   ipcMain.handle('sidecar:stop', () => {
     pythonSpawner.stop()
     return { stopped: true }
+  })
+
+  // ─ AI Model Config ──────────────────────────────────────
+
+  ipcMain.handle('ai-model:list', async () => {
+    return aiModelConfig.getAll()
+  })
+
+  ipcMain.handle('ai-model:get', async (_e, id: string) => {
+    return aiModelConfig.get(id as any)
+  })
+
+  ipcMain.handle('ai-model:save', async (_e, id: string, config: { provider: string; apiKey: string; baseUrl?: string; modelName?: string }) => {
+    await aiModelConfig.save(id as any, config)
+    return { ok: true }
+  })
+
+  /** 各 Provider 的模型列表端点 */
+  const AI_MODEL_ENDPOINTS: Record<string, (apiKey: string) => Promise<string[]>> = {
+    'dashscope': async (apiKey: string) => {
+      const res = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/models', {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10000),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json() as any
+      return (data.data || []).map((m: any) => m.id).filter(Boolean).sort()
+    },
+    'dashscope-intl': async (apiKey: string) => {
+      const res = await fetch('https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models', {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10000),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json() as any
+      return (data.data || []).map((m: any) => m.id).filter(Boolean).sort()
+    },
+  }
+
+  ipcMain.handle('ai-model:list-models', async (_e, sectionId: string, provider: string, apiKey: string) => {
+    try {
+      const fetcher = AI_MODEL_ENDPOINTS[provider]
+      if (!fetcher) return { ok: false, error: `Provider "${provider}" 暂不支持在线检测模型` }
+      const models = await fetcher(apiKey)
+      // 缓存检测结果
+      await aiModelConfig.saveDetectedModels(sectionId as any, models)
+      return { ok: true, models }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('ai-model:get-detected', (_e, sectionId: string) => {
+    return aiModelConfig.getDetectedModels(sectionId as any)
   })
 
   // ─ FFmpeg ────────────────────────────────────────────────
