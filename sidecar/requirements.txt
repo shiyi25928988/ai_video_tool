@@ -1,0 +1,14 @@
+# Mock mode: 只需要 Flask
+flask>=3.0.0
+
+# 真实模式依赖 (取消注释即可)
+# torch>=2.4.0
+# diffusers>=0.30.0
+# transformers>=4.45.0
+# accelerate>=0.34.0
+# ip-adapter>=0.2.0
+# timm>=0.9.16
+# pillow>=10.4.0
+# soundfile>=0.12.1
+# opencv-python>=4.10.0
+# gunicorn>=22.0.0
