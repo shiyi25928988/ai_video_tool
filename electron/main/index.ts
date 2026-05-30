@@ -58,6 +58,7 @@ app.whenReady().then(async () => {
   createWindow()
   registerIPC()
   await providerRegistry.load()
+  await projectManager.loadWorkspace()
   await aiModelConfig.load()
   await llmConfigManager.load()
 
@@ -109,6 +110,30 @@ function registerIPC(): void {
 
   ipcMain.handle('project:update', async (_e, partial: Record<string, unknown>) => {
     await projectManager.updateProject(partial as any)
+    return { ok: true }
+  })
+
+  // ─ Workspace ──────────────────────────────────────────────
+
+  ipcMain.handle('project:delete', async (_e, projectPath: string) => {
+    const { rm } = await import('fs/promises')
+    try {
+      await rm(projectPath, { recursive: true, force: true })
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('workspace:get', () => {
+    return {
+      path: projectManager.getWorkspacePath(),
+      isDefault: projectManager.getWorkspacePath() === join(app.getPath('documents'), 'VideoAIStudio', 'projects'),
+    }
+  })
+
+  ipcMain.handle('workspace:set', async (_e, path: string) => {
+    await projectManager.setWorkspacePath(path)
     return { ok: true }
   })
 
@@ -290,6 +315,100 @@ function registerIPC(): void {
   ipcMain.handle('sidecar:stop', () => {
     pythonSpawner.stop()
     return { stopped: true }
+  })
+
+  ipcMain.handle('sidecar:generate-i2v', async (_e, params: { prompt: string; imageUrl: string; endImageUrl?: string; duration?: number }) => {
+    if (!pythonSpawner.isReady) return { ok: false, error: 'Sidecar 未启动' }
+    try {
+      const outputDir = join(app.getPath('documents'), 'VideoAIStudio', 'projects', 'videos')
+
+      const i2vConfig = await aiModelConfig.get('imageToVideo')
+      const apiKey = i2vConfig?.apiKey || ''
+      const model = i2vConfig?.modelName || 'wan2.6-i2v-flash'
+
+      console.log(`[generate-i2v] model=${model}, hasKey=${!!apiKey}`)
+
+      const result = await pythonSpawner.call('/generate_i2v', {
+        prompt: params.prompt,
+        api_key: apiKey,
+        model: model,
+        image_url: params.imageUrl,
+        end_image_url: params.endImageUrl || '',
+        duration: params.duration || 5,
+        output_dir: outputDir,
+        filename: `i2v_${Date.now()}`,
+      })
+
+      const videoPath = (result.path as string).replace(/\\/g, '/')
+      console.log(`[generate-i2v] done, path=${videoPath}, mock=${result.mock}`)
+      return { ok: true, path: videoPath, mock: result.mock }
+    } catch (err) {
+      console.error('[generate-i2v] failed:', (err as Error).message)
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('sidecar:generate-video', async (_e, params: { prompt: string; duration?: number }) => {
+    if (!pythonSpawner.isReady) return { ok: false, error: 'Sidecar 未启动' }
+    try {
+      const outputDir = join(app.getPath('documents'), 'VideoAIStudio', 'projects', 'videos')
+      const { readFile } = await import('fs/promises')
+
+      const videoConfig = await aiModelConfig.get('textToVideo')
+      const apiKey = videoConfig?.apiKey || ''
+      const model = videoConfig?.modelName || 'happyhorse-1.0-t2v'
+
+      console.log(`[generate-video] model=${model}, hasKey=${!!apiKey}, duration=${params.duration || 5}s`)
+
+      const result = await pythonSpawner.call('/generate_video', {
+        prompt: params.prompt,
+        api_key: apiKey,
+        model: model,
+        duration: params.duration || 5,
+        output_dir: outputDir,
+        filename: `video_${Date.now()}`,
+      })
+
+      const videoPath = (result.path as string).replace(/\\/g, '/')
+      console.log(`[generate-video] done, path=${videoPath}, mock=${result.mock}`)
+      return { ok: true, path: videoPath, mock: result.mock }
+    } catch (err) {
+      console.error('[generate-video] failed:', (err as Error).message)
+      return { ok: false, error: (err as Error).message }
+    }
+  })
+
+  ipcMain.handle('sidecar:generate-image', async (_e, params: { prompt: string; characterId: string }) => {
+    if (!pythonSpawner.isReady) return { ok: false, error: 'Sidecar 未启动' }
+    try {
+      const outputDir = join(app.getPath('documents'), 'VideoAIStudio', 'projects', 'characters')
+      const { readFile } = await import('fs/promises')
+
+      const imgConfig = await aiModelConfig.get('textToImage')
+      const apiKey = imgConfig?.apiKey || ''
+      const model = imgConfig?.modelName || 'wan2.7-image-pro'
+
+      console.log(`[generate-image] characterId=${params.characterId}, model=${model}, hasKey=${!!apiKey}`)
+
+      const result = await pythonSpawner.call('/generate_image', {
+        prompt: params.prompt,
+        character_id: params.characterId,
+        api_key: apiKey,
+        model: model,
+        output_dir: outputDir,
+        filename: params.characterId,
+      })
+
+      const imagePath = (result.path as string).replace(/\\/g, '/')
+      // 读取图片转 base64 data URL，避免 file:// 协议问题
+      const imageBuffer = await readFile(imagePath)
+      const dataUrl = `data:image/png;base64,${imageBuffer.toString('base64')}`
+      console.log(`[generate-image] done, path=${imagePath}, size=${imageBuffer.length}, mock=${result.mock}`)
+      return { ok: true, path: imagePath, dataUrl, mock: result.mock }
+    } catch (err) {
+      console.error('[generate-image] failed:', (err as Error).message)
+      return { ok: false, error: (err as Error).message }
+    }
   })
 
   // ─ AI Model Config ──────────────────────────────────────

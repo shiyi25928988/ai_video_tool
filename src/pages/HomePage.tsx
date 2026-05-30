@@ -7,6 +7,7 @@ export default function HomePage() {
   const [title, setTitle] = useState('')
   const [style, setStyle] = useState('anime')
   const [duration, setDuration] = useState(300)
+  const [deleteTarget, setDeleteTarget] = useState<{ path: string; title: string } | null>(null)
 
   useEffect(() => {
     loadProjects()
@@ -25,6 +26,17 @@ export default function HomePage() {
     if (dir) await openProject(dir)
   }
 
+  const handleDelete = async () => {
+    if (!deleteTarget || !window.electronAPI) return
+    const result = await window.electronAPI.project.delete(deleteTarget.path)
+    if (result.ok) {
+      setDeleteTarget(null)
+      loadProjects()
+    } else {
+      alert(`删除失败: ${result.error}`)
+    }
+  }
+
   const formatDate = (iso: string) => {
     return new Date(iso).toLocaleString('zh-CN', {
       month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
@@ -37,7 +49,7 @@ export default function HomePage() {
       <div className="text-center mb-10">
         <h1 className="text-4xl font-bold text-primary-400 mb-3">Video AI Studio</h1>
         <p className="text-dark-400 max-w-lg">
-          输入你的创意，AI 自动生成长视频。零服务端依赖，所有数据和推理在本地完成。
+          输入你的创意，AI 自动生成长视频。
         </p>
       </div>
 
@@ -100,7 +112,7 @@ export default function HomePage() {
                   type="number"
                   value={duration}
                   onChange={e => setDuration(Number(e.target.value))}
-                  min={60}
+                  min={5}
                   max={600}
                   className="w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white focus:outline-none focus:border-primary-500"
                 />
@@ -131,22 +143,57 @@ export default function HomePage() {
           <h2 className="text-lg font-semibold mb-3 text-dark-300">最近项目</h2>
           <div className="space-y-2">
             {projects.map(p => (
-              <button
-                key={p.id}
-                onClick={() => openProject(p.path)}
-                className="w-full flex items-center justify-between p-4 bg-dark-800 hover:bg-dark-700 border border-dark-700 rounded-lg text-left transition-colors"
-              >
-                <div>
-                  <div className="font-medium text-white">{p.title}</div>
-                  <div className="text-sm text-dark-400">
-                    {p.pipelineState.phase === 'done' ? '已完成' : p.pipelineState.phase} · {formatDate(p.updatedAt)}
+              <div key={p.id} className="flex items-center gap-2 group">
+                <button
+                  onClick={() => openProject(p.path)}
+                  className="flex-1 flex items-center justify-between p-4 bg-dark-800 hover:bg-dark-700 hover:border-yellow-500/60 border border-dark-700 rounded-lg text-left transition-colors"
+                >
+                  <div>
+                    <div className="font-medium text-white">{p.title}</div>
+                    <div className="text-sm text-dark-400">
+                      {p.pipelineState.phase === 'done' ? '已完成' : p.pipelineState.phase} · {formatDate(p.updatedAt)}
+                    </div>
                   </div>
-                </div>
-                <div className="text-dark-500 text-sm">
-                  {Math.floor(p.durationTargetSec / 60)} 分钟
-                </div>
-              </button>
+                  <div className="text-dark-500 text-sm">
+                    {Math.floor(p.durationTargetSec / 60)} 分钟
+                  </div>
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDeleteTarget({ path: p.path, title: p.title }) }}
+                  className="p-2 rounded-lg text-dark-500 hover:text-red-400 hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"
+                  title="删除项目"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 删除确认对话框 */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-white mb-2">确认删除</h3>
+            <p className="text-dark-300 text-sm mb-1">确定要删除以下项目吗？此操作不可恢复。</p>
+            <p className="text-white font-medium mb-6 bg-dark-900 px-3 py-2 rounded-lg">{deleteTarget.title}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDelete}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white font-medium transition-colors"
+              >
+                确认删除
+              </button>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-300 transition-colors"
+              >
+                取消
+              </button>
+            </div>
           </div>
         </div>
       )}

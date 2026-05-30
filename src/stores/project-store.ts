@@ -44,6 +44,8 @@ interface Project {
 interface ScriptProgress {
   layer: number
   status: string
+  message?: string
+  data?: Record<string, unknown>
 }
 
 interface PipelineProgress {
@@ -135,7 +137,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     set({ loading: true, error: null, scriptProgress: { layer: 0, status: 'start' } })
 
     const unsub = api.script.onProgress((p: any) => {
-      set({ scriptProgress: { layer: p.layer, status: p.status } })
+      set({ scriptProgress: { layer: p.layer, status: p.status, message: p.message, data: p.data } })
     })
 
     try {

@@ -6,6 +6,11 @@ const electronAPI = {
     version: () => ipcRenderer.invoke("app:version"),
     platform: () => ipcRenderer.invoke("app:platform")
   },
+  // ─ Workspace ──────────────────────────────────────────
+  workspace: {
+    get: () => ipcRenderer.invoke("workspace:get"),
+    set: (path) => ipcRenderer.invoke("workspace:set", path)
+  },
   // ─ Project ─────────────────────────────────────────────
   project: {
     list: () => ipcRenderer.invoke("project:list"),
@@ -13,7 +18,8 @@ const electronAPI = {
     open: (projectDir) => ipcRenderer.invoke("project:open", projectDir),
     save: () => ipcRenderer.invoke("project:save"),
     get: () => ipcRenderer.invoke("project:get"),
-    update: (partial) => ipcRenderer.invoke("project:update", partial)
+    update: (partial) => ipcRenderer.invoke("project:update", partial),
+    delete: (projectPath) => ipcRenderer.invoke("project:delete", projectPath)
   },
   // ─ Script ──────────────────────────────────────────────
   script: {
@@ -95,7 +101,10 @@ const electronAPI = {
     ping: () => ipcRenderer.invoke("sidecar:ping"),
     start: (pythonCmd) => ipcRenderer.invoke("sidecar:start", pythonCmd),
     health: () => ipcRenderer.invoke("sidecar:health"),
-    stop: () => ipcRenderer.invoke("sidecar:stop")
+    stop: () => ipcRenderer.invoke("sidecar:stop"),
+    generateImage: (params) => ipcRenderer.invoke("sidecar:generate-image", params),
+    generateVideo: (params) => ipcRenderer.invoke("sidecar:generate-video", params),
+    generateI2V: (params) => ipcRenderer.invoke("sidecar:generate-i2v", params)
   },
   // ─ FFmpeg ──────────────────────────────────────────────
   ffmpeg: {

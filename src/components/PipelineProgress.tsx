@@ -1,7 +1,7 @@
 import { useProjectStore } from '../stores/project-store'
 
 export default function PipelineProgress() {
-  const { currentProject, startPipeline, pipelineProgress, loading, error } = useProjectStore()
+  const { currentProject, startPipeline, pipelineProgress, loading, error, refreshProject } = useProjectStore()
 
   if (!currentProject) return null
 
@@ -21,6 +21,25 @@ export default function PipelineProgress() {
     error: '错误',
   }
 
+  const canStart = state.phase === 'idle' || state.phase === 'done' || state.phase === 'error' || failed > 0
+
+  const resetAndStart = async () => {
+    if (!window.electronAPI) return
+    // 重置失败的 shot 状态为 pending
+    if (currentProject.script) {
+      const chapters = currentProject.script.chapters.map(ch => ({
+        ...ch,
+        shots: ch.shots.map(s => s.status === 'failed' ? { ...s, status: 'pending' as const } : s)
+      }))
+      await window.electronAPI.project.update({
+        script: { chapters },
+        pipelineState: { phase: 'idle', totalShots: 0, completedShots: 0, failedShots: 0, estimatedRemainingSec: 0 }
+      })
+      await refreshProject()
+    }
+    startPipeline()
+  }
+
   return (
     <div className="h-full overflow-auto p-6">
       <div className="max-w-2xl mx-auto">
@@ -31,20 +50,20 @@ export default function PipelineProgress() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-sm text-dark-400">当前阶段</p>
-              <p className="text-lg font-semibold text-white">
+              <p className={`text-lg font-semibold ${state.phase === 'error' ? 'text-red-400' : 'text-white'}`}>
                 {phaseLabel[state.phase] || state.phase}
               </p>
             </div>
-            {state.phase === 'idle' && (
+            {canStart && (
               <button
-                onClick={startPipeline}
+                onClick={resetAndStart}
                 disabled={loading || !currentProject.script}
                 className="px-6 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg text-white font-medium transition-colors"
               >
-                开始渲染
+                {state.phase === 'idle' ? '开始渲染' : '重新渲染'}
               </button>
             )}
-            {loading && state.phase !== 'idle' && (
+            {loading && !canStart && (
               <div className="text-yellow-400 text-sm animate-pulse">运行中...</div>
             )}
           </div>

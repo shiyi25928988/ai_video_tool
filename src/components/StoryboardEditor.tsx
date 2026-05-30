@@ -22,11 +22,7 @@ export default function StoryboardEditor() {
             输入你的创意描述，AI 将自动生成完整的故事大纲、章节和分镜脚本。
           </p>
 
-          {scriptProgress && (
-            <div className="mb-4 text-sm text-primary-400">
-              Layer {scriptProgress.layer} — {scriptProgress.status === 'start' ? '生成中...' : '完成'}
-            </div>
-          )}
+          {scriptProgress && <ScriptProgressStepper progress={scriptProgress} />}
 
           {error && (
             <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm max-w-md">
@@ -84,6 +80,88 @@ export default function StoryboardEditor() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+const LAYER_INFO = [
+  { id: 1, label: '故事大纲', desc: '分析创意，生成角色和故事线' },
+  { id: 2, label: '章节拆解', desc: '拆解章节和分镜脚本' },
+  { id: 3, label: '分镜细化', desc: '细化镜头语言和台词' },
+  { id: 4, label: '提示词组装', desc: '生成图像提示词' },
+]
+
+function ScriptProgressStepper({ progress }: { progress: { layer: number; status: string; message?: string; data?: Record<string, unknown> } }) {
+  return (
+    <div className="w-full max-w-lg mb-6">
+      {LAYER_INFO.map((layer, i) => {
+        const isDone = progress.layer > layer.id || (progress.layer === layer.id && progress.status === 'done')
+        const isActive = progress.layer === layer.id && progress.status === 'start'
+        const isError = progress.layer === layer.id && progress.status === 'error'
+        const isPending = progress.layer < layer.id
+
+        return (
+          <div key={layer.id} className="flex gap-3">
+            {/* 竖线 + 圆点 */}
+            <div className="flex flex-col items-center">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                isDone ? 'bg-green-600 text-white' :
+                isActive ? 'bg-primary-600 text-white animate-pulse' :
+                isError ? 'bg-red-600 text-white' :
+                'bg-dark-700 text-dark-500'
+              }`}>
+                {isDone ? '✓' : isError ? '✗' : layer.id}
+              </div>
+              {i < LAYER_INFO.length - 1 && (
+                <div className={`w-0.5 flex-1 min-h-[24px] ${isDone ? 'bg-green-600' : 'bg-dark-700'}`} />
+              )}
+            </div>
+
+            {/* 内容 */}
+            <div className={`pb-4 ${i < LAYER_INFO.length - 1 ? '' : ''}`}>
+              <div className={`text-sm font-medium ${isDone ? 'text-green-400' : isActive ? 'text-primary-400' : isError ? 'text-red-400' : 'text-dark-500'}`}>
+                {layer.label}
+              </div>
+              <div className={`text-xs mt-0.5 ${isActive ? 'text-dark-300' : 'text-dark-500'}`}>
+                {isDone && progress.layer === layer.id && progress.message
+                  ? progress.message
+                  : isActive
+                    ? (progress.message || layer.desc + '...')
+                    : isError
+                      ? progress.message || '生成失败'
+                      : layer.desc}
+              </div>
+
+              {/* 完成后显示摘要数据 */}
+              {isDone && progress.layer === layer.id && progress.data && (
+                <div className="mt-2 text-xs space-y-0.5">
+                  {progress.data.logline && (
+                    <div className="text-dark-300">📝 {String(progress.data.logline)}</div>
+                  )}
+                  {progress.data.characterNames && (
+                    <div className="text-dark-300">👤 角色: {(progress.data.characterNames as string[]).join('、')}</div>
+                  )}
+                  {progress.data.chapterTitles && (
+                    <div className="text-dark-300">📖 章节: {(progress.data.chapterTitles as string[]).join('、')}</div>
+                  )}
+                  {progress.data.totalShots && (
+                    <div className="text-dark-300">🎬 共 {String(progress.data.totalShots)} 个分镜</div>
+                  )}
+                </div>
+              )}
+
+              {/* 进度中显示脉动动画 */}
+              {isActive && (
+                <div className="flex gap-1 mt-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

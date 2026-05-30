@@ -74,16 +74,20 @@ const MODEL_PROVIDERS: Record<string, ProviderPreset[]> = {
       value: 'dashscope',
       label: '阿里百炼 - 北京',
       baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
-      models: ['wan2.7-image-pro', 'wan2.1-image-plus', 'wanx-v1'],
+      models: [
+        'wan2.7-image-pro', 'wan2.7-image',
+        'qwen-image-2.0-pro', 'qwen-image-2.0', 'qwen-image-max', 'qwen-image-plus',
+        'qwen-image-edit-max', 'qwen-image-edit-plus',
+        'z-image-turbo',
+      ],
     },
     {
       value: 'dashscope-intl',
       label: '阿里百炼 - 新加坡',
       baseUrl: 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
-      models: ['wan2.7-image-pro', 'wan2.1-image-plus', 'wanx-v1'],
+      models: ['wan2.7-image-pro', 'wan2.7-image', 'qwen-image-2.0-pro', 'qwen-image-2.0'],
     },
     { value: 'comfyui', label: 'ComfyUI', baseUrl: 'http://127.0.0.1:8188' },
-    { value: 'midjourney', label: 'Midjourney API' },
     { value: 'custom', label: '自定义' },
   ],
   imageToVideo: [
@@ -91,13 +95,13 @@ const MODEL_PROVIDERS: Record<string, ProviderPreset[]> = {
       value: 'dashscope',
       label: '阿里百炼 - 北京',
       baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
-      models: ['wanx2.1-i2v-turbo', 'wanx2.1-i2v-plus'],
+      models: ['wan2.6-i2v-flash', 'wan2.2-kf2v-flash', 'wanx2.1-i2v-turbo', 'wanx2.1-i2v-plus'],
     },
     {
       value: 'dashscope-intl',
       label: '阿里百炼 - 新加坡',
       baseUrl: 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
-      models: ['wanx2.1-i2v-turbo', 'wanx2.1-i2v-plus'],
+      models: ['wan2.6-i2v-flash', 'wan2.2-kf2v-flash', 'wanx2.1-i2v-turbo', 'wanx2.1-i2v-plus'],
     },
     { value: 'kling', label: '快手可灵' },
     { value: 'jimeng', label: '字节即梦' },
@@ -108,13 +112,13 @@ const MODEL_PROVIDERS: Record<string, ProviderPreset[]> = {
       value: 'dashscope',
       label: '阿里百炼 - 北京',
       baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
-      models: ['wanx2.1-t2v-turbo', 'wanx2.1-t2v-plus'],
+      models: ['happyhorse-1.0-t2v', 'wanx2.1-t2v-turbo', 'wanx2.1-t2v-plus'],
     },
     {
       value: 'dashscope-intl',
       label: '阿里百炼 - 新加坡',
       baseUrl: 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis',
-      models: ['wanx2.1-t2v-turbo', 'wanx2.1-t2v-plus'],
+      models: ['happyhorse-1.0-t2v', 'wanx2.1-t2v-turbo', 'wanx2.1-t2v-plus'],
     },
     { value: 'kling', label: '快手可灵' },
     { value: 'jimeng', label: '字节即梦' },
@@ -123,15 +127,23 @@ const MODEL_PROVIDERS: Record<string, ProviderPreset[]> = {
   tts: [
     {
       value: 'dashscope',
-      label: '阿里百炼 (CosyVoice) - 北京',
+      label: '阿里百炼 - 北京',
       baseUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text2speech/generation',
-      models: ['cosyvoice-v1', 'sambert'],
+      models: [
+        'qwen3-tts-flash', 'qwen3-tts-instruct-flash', 'qwen3-tts-vd', 'qwen3-tts-vc',
+        'qwen-tts', 'cosyvoice-v1', 'sambert',
+      ],
     },
     {
       value: 'dashscope-intl',
-      label: '阿里百炼 (CosyVoice) - 新加坡',
+      label: '阿里百炼 - 新加坡',
       baseUrl: 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text2speech/generation',
-      models: ['cosyvoice-v1', 'sambert'],
+      models: ['qwen3-tts-flash', 'cosyvoice-v1', 'sambert'],
+    },
+    {
+      value: 'minimax',
+      label: 'MiniMax',
+      models: ['speech-02-hd', 'speech-02-turbo', 'speech-2.8-hd', 'speech-2.8-turbo'],
     },
     { value: 'fishspeech', label: 'Fish Speech' },
     { value: 'custom', label: '自定义' },
@@ -148,6 +160,8 @@ const AI_SECTIONS = [
 export default function SettingsPage() {
   const [sidecarStatus, setSidecarStatus] = useState<string>('未启动')
   const [ffmpegStatus, setFfmpegStatus] = useState<string>('检测中...')
+  const [workspacePath, setWorkspacePath] = useState<string>('')
+  const [workspaceIsDefault, setWorkspaceIsDefault] = useState(true)
 
   // LLM 多配置
   const [llmConfigs, setLlmConfigs] = useState<LLMSummary[]>([])
@@ -177,7 +191,27 @@ export default function SettingsPage() {
     checkSidecar()
     loadLlmConfigs()
     loadAIModelConfigs()
+    loadWorkspace()
   }, [])
+
+  const loadWorkspace = async () => {
+    if (!api()) return
+    try {
+      const ws = await api()!.workspace.get()
+      setWorkspacePath(ws.path)
+      setWorkspaceIsDefault(ws.isDefault)
+    } catch {}
+  }
+
+  const changeWorkspace = async () => {
+    if (!api()) return
+    const dir = await api()!.dialog.openDirectory()
+    if (dir) {
+      await api()!.workspace.set(dir)
+      setWorkspacePath(dir)
+      setWorkspaceIsDefault(false)
+    }
+  }
 
   const checkFfmpeg = async () => {
     const result = await api()!.ffmpeg.detect()
@@ -371,10 +405,14 @@ export default function SettingsPage() {
 
   const testPing = async () => {
     try {
-      const result = await api()!.sidecar.ping()
-      alert(`IPC 连通! ${JSON.stringify(result)}`)
+      const result = await api()!.sidecar.health()
+      if (result.status === 'ok') {
+        alert(`Sidecar 运行中!\n模式: ${result.mode}\nGPU: ${result.gpu ? '是' : '否'}`)
+      } else {
+        alert(`Sidecar 未运行或不可达\n状态: ${result.status}`)
+      }
     } catch (err) {
-      alert(`IPC 失败: ${(err as Error).message}`)
+      alert(`连接失败: ${(err as Error).message}`)
     }
   }
 
@@ -386,6 +424,16 @@ export default function SettingsPage() {
       setSidecarStatus(result.ready ? `运行中 (${result.mode})` : `失败: ${result.error || '未知错误'}`)
     } catch (err) {
       setSidecarStatus(`异常: ${(err as Error).message}`)
+    }
+  }
+
+  const stopSidecar = async () => {
+    if (!api()) return
+    try {
+      await api()!.sidecar.stop()
+      setSidecarStatus('已停止')
+    } catch (err) {
+      setSidecarStatus(`停止失败: ${(err as Error).message}`)
     }
   }
 
@@ -477,6 +525,24 @@ export default function SettingsPage() {
       <div className="max-w-2xl mx-auto space-y-8">
         <h1 className="text-2xl font-bold">设置</h1>
 
+        {/* 工作空间 */}
+        <section className="bg-dark-800 border border-dark-700 rounded-xl p-6">
+          <h2 className="text-lg font-semibold mb-4">工作空间</h2>
+          <p className="text-dark-400 text-sm mb-3">项目文件存储位置。更改后新项目将创建在新路径。</p>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-dark-300 text-sm truncate">
+              {workspacePath || '加载中...'}
+            </div>
+            <button onClick={changeWorkspace}
+              className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors flex-shrink-0">
+              更改路径
+            </button>
+          </div>
+          {!workspaceIsDefault && (
+            <p className="text-yellow-400/70 text-xs mt-2">⚠ 已使用自定义路径，重启应用后生效</p>
+          )}
+        </section>
+
         {/* Python Sidecar */}
         <section className="bg-dark-800 border border-dark-700 rounded-xl p-6">
           <h2 className="text-lg font-semibold mb-4">Python Sidecar</h2>
@@ -485,8 +551,9 @@ export default function SettingsPage() {
               <p className="text-dark-400 text-sm">状态: <span className="text-white">{sidecarStatus}</span></p>
             </div>
             <div className="flex gap-2">
-              <button onClick={testPing} className="px-3 py-2 bg-dark-600 hover:bg-dark-500 rounded-lg text-white text-sm transition-colors">测试连接</button>
+              <button onClick={testPing} className="px-3 py-2 bg-dark-600 hover:bg-dark-500 rounded-lg text-white text-sm transition-colors">检测状态</button>
               <button onClick={startSidecar} className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors">启动 Sidecar</button>
+              <button onClick={stopSidecar} className="px-4 py-2 bg-red-900/50 hover:bg-red-900/80 rounded-lg text-red-300 text-sm transition-colors">关闭 Sidecar</button>
             </div>
           </div>
         </section>

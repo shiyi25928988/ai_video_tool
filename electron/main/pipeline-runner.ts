@@ -218,16 +218,18 @@ export class PipelineRunner extends EventEmitter {
 
   /** 渲染单个分镜 */
   private async renderShot(shot: ShotScript): Promise<void> {
-    const projectDir = this.projectManager.getProjectPath()!
     const shotDir = await this.projectManager.ensureShotDir(shot.id)
 
     if (!this.sidecar.isReady) {
-      logger.warn(`Sidecar not ready, skipping shot ${shot.id}`)
-      return
+      logger.warn(`[${shot.id}] Sidecar not ready, skipping`)
+      throw new Error('Sidecar 未启动')
     }
+
+    logger.info(`[${shot.id}] 开始渲染 shotType=${shot.shotType}, duration=${shot.durationSec}s`)
 
     // 生成图片
     if (shot.imagePrompt) {
+      logger.info(`[${shot.id}] 调用 /generate_image prompt=${shot.imagePrompt.positive.slice(0, 80)}...`)
       const imgResult = await this.sidecar.call('/generate_image', {
         prompt: shot.imagePrompt.positive,
         negative_prompt: shot.imagePrompt.negative,
@@ -235,14 +237,15 @@ export class PipelineRunner extends EventEmitter {
         output_dir: shotDir
       })
       shot.assets.image = imgResult.path as string
+      logger.info(`[${shot.id}] 图片生成完成: ${shot.assets.image}`)
     }
 
     // 根据镜头类型处理
     switch (shot.shotType) {
       case 'dialogue': {
-        // TTS 生成
         if (shot.dialogue.length > 0) {
           const text = shot.dialogue.map(d => d.text).join(' ')
+          logger.info(`[${shot.id}] 调用 /generate_tts text=${text.slice(0, 50)}...`)
           const ttsResult = await this.sidecar.call('/generate_tts', {
             text,
             character_id: shot.dialogue[0].characterId,
@@ -250,15 +253,17 @@ export class PipelineRunner extends EventEmitter {
             output_dir: shotDir
           })
           shot.assets.audio = ttsResult.path as string
+          logger.info(`[${shot.id}] TTS 完成: ${shot.assets.audio}`)
 
-          // 口型同步
           if (shot.assets.image) {
+            logger.info(`[${shot.id}] 调用 /musetalk`)
             const lipResult = await this.sidecar.call('/musetalk', {
               image_path: shot.assets.image,
               audio_path: shot.assets.audio,
               output_dir: shotDir
             })
             shot.assets.video = lipResult.path as string
+            logger.info(`[${shot.id}] 口型同步完成: ${shot.assets.video}`)
           }
         }
         break
@@ -266,31 +271,41 @@ export class PipelineRunner extends EventEmitter {
 
       case 'transition':
       case 'establishing': {
-        // 2.5D 深度动画
         if (shot.assets.image) {
+          logger.info(`[${shot.id}] 调用 /depth_animate movement=${shot.camera?.movement}`)
           const depthResult = await this.sidecar.call('/depth_animate', {
             image_path: shot.assets.image,
             duration_sec: shot.durationSec,
-            movement: shot.camera.movement,
+            movement: shot.camera?.movement,
             output_dir: shotDir
           })
           shot.assets.video = depthResult.path as string
+          logger.info(`[${shot.id}] 深度动画完成: ${shot.assets.video}`)
         }
         break
       }
 
       case 'action': {
-        // 动作镜头 — 需要视频 Provider，后续步骤实现
-        logger.info(`Action shot ${shot.id} — video provider not yet implemented`)
+        logger.info(`[${shot.id}] 调用 /generate_video prompt=${shot.sceneDescription.slice(0, 80)}...`)
+        const videoResult = await this.sidecar.call('/generate_video', {
+          prompt: shot.sceneDescription,
+          duration: Math.min(shot.durationSec, 15),
+          output_dir: shotDir,
+          filename: shot.id,
+        })
+        shot.assets.video = videoResult.path as string
+        logger.info(`[${shot.id}] 视频生成完成: ${shot.assets.video}`)
         break
       }
 
       case 'narration':
       case 'reaction':
       default:
-        // 静态图，不需要额外处理
+        logger.info(`[${shot.id}] 静态镜头，无需额外处理`)
         break
     }
+
+    logger.info(`[${shot.id}] 渲染完成 assets=${JSON.stringify(shot.assets)}`)
   }
 
   // ── Phase 4: 组装导出 ──────────────────────────────────────

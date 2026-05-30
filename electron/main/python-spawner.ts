@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process'
+import { spawn, execSync, type ChildProcess } from 'child_process'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { EventEmitter } from 'events'
@@ -197,11 +197,23 @@ export class PythonSpawner extends EventEmitter {
 
   /** 停止 Sidecar */
   stop(): void {
-    if (this.process) {
-      this.process.kill()
-      this.process = null
-      this.ready = false
+    if (!this.process) return
+
+    const pid = this.process.pid
+    try {
+      if (process.platform === 'win32' && pid) {
+        // Windows: taskkill 强制终止进程树
+        execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' })
+      } else {
+        this.process.kill('SIGKILL')
+      }
+    } catch {
+      // 进程可能已退出
     }
+
+    this.process = null
+    this.ready = false
+    console.log(`[PythonSpawner] Sidecar stopped (pid=${pid})`)
   }
 
   get isReady(): boolean {

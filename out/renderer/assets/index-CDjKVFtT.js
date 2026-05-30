@@ -7305,7 +7305,7 @@ const useProjectStore = create((set, get) => ({
     }
     set({ loading: true, error: null, scriptProgress: { layer: 0, status: "start" } });
     const unsub = api2.script.onProgress((p) => {
-      set({ scriptProgress: { layer: p.layer, status: p.status } });
+      set({ scriptProgress: { layer: p.layer, status: p.status, message: p.message, data: p.data } });
     });
     try {
       const result = await api2.script.generate(userInput, style);
@@ -7365,6 +7365,7 @@ function HomePage() {
   const [title, setTitle] = reactExports.useState("");
   const [style, setStyle] = reactExports.useState("anime");
   const [duration, setDuration] = reactExports.useState(300);
+  const [deleteTarget, setDeleteTarget] = reactExports.useState(null);
   reactExports.useEffect(() => {
     loadProjects();
   }, []);
@@ -7379,6 +7380,16 @@ function HomePage() {
     const dir = await window.electronAPI.dialog.openDirectory();
     if (dir) await openProject(dir);
   };
+  const handleDelete = async () => {
+    if (!deleteTarget || !window.electronAPI) return;
+    const result = await window.electronAPI.project.delete(deleteTarget.path);
+    if (result.ok) {
+      setDeleteTarget(null);
+      loadProjects();
+    } else {
+      alert(`删除失败: ${result.error}`);
+    }
+  };
   const formatDate = (iso) => {
     return new Date(iso).toLocaleString("zh-CN", {
       month: "2-digit",
@@ -7390,7 +7401,7 @@ function HomePage() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "h-full flex flex-col items-center p-8 overflow-auto", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center mb-10", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-4xl font-bold text-primary-400 mb-3", children: "Video AI Studio" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 max-w-lg", children: "输入你的创意，AI 自动生成长视频。零服务端依赖，所有数据和推理在本地完成。" })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 max-w-lg", children: "输入你的创意，AI 自动生成长视频。" })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 mb-10", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -7454,7 +7465,7 @@ function HomePage() {
                 type: "number",
                 value: duration,
                 onChange: (e) => setDuration(Number(e.target.value)),
-                min: 60,
+                min: 5,
                 max: 600,
                 className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white focus:outline-none focus:border-primary-500"
               }
@@ -7484,29 +7495,65 @@ function HomePage() {
     ] }),
     projects.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full max-w-2xl", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-3 text-dark-300", children: "最近项目" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: projects.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          onClick: () => openProject(p.path),
-          className: "w-full flex items-center justify-between p-4 bg-dark-800 hover:bg-dark-700 border border-dark-700 rounded-lg text-left transition-colors",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium text-white", children: p.title }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-dark-400", children: [
-                p.pipelineState.phase === "done" ? "已完成" : p.pipelineState.phase,
-                " · ",
-                formatDate(p.updatedAt)
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: projects.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 group", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            onClick: () => openProject(p.path),
+            className: "flex-1 flex items-center justify-between p-4 bg-dark-800 hover:bg-dark-700 hover:border-yellow-500/60 border border-dark-700 rounded-lg text-left transition-colors",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium text-white", children: p.title }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-dark-400", children: [
+                  p.pipelineState.phase === "done" ? "已完成" : p.pipelineState.phase,
+                  " · ",
+                  formatDate(p.updatedAt)
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-dark-500 text-sm", children: [
+                Math.floor(p.durationTargetSec / 60),
+                " 分钟"
               ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-dark-500 text-sm", children: [
-              Math.floor(p.durationTargetSec / 60),
-              " 分钟"
-            ] })
-          ]
-        },
-        p.id
-      )) })
-    ] })
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: (e) => {
+              e.stopPropagation();
+              setDeleteTarget({ path: p.path, title: p.title });
+            },
+            className: "p-2 rounded-lg text-dark-500 hover:text-red-400 hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all",
+            title: "删除项目",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx("svg", { className: "w-4 h-4", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" }) })
+          }
+        )
+      ] }, p.id)) })
+    ] }),
+    deleteTarget && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-black/60 flex items-center justify-center z-50", onClick: () => setDeleteTarget(null), children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-sm w-full mx-4", onClick: (e) => e.stopPropagation(), children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold text-white mb-2", children: "确认删除" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-300 text-sm mb-1", children: "确定要删除以下项目吗？此操作不可恢复。" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-white font-medium mb-6 bg-dark-900 px-3 py-2 rounded-lg", children: deleteTarget.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: handleDelete,
+            className: "flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white font-medium transition-colors",
+            children: "确认删除"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => setDeleteTarget(null),
+            className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-300 transition-colors",
+            children: "取消"
+          }
+        )
+      ] })
+    ] }) })
   ] });
 }
 function StoryboardEditor() {
@@ -7520,12 +7567,7 @@ function StoryboardEditor() {
     !hasScript && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 flex flex-col items-center justify-center p-8", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold mb-4", children: "生成剧本" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 mb-4 text-center max-w-md", children: "输入你的创意描述，AI 将自动生成完整的故事大纲、章节和分镜脚本。" }),
-      scriptProgress && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 text-sm text-primary-400", children: [
-        "Layer ",
-        scriptProgress.layer,
-        " — ",
-        scriptProgress.status === "start" ? "生成中..." : "完成"
-      ] }),
+      scriptProgress && /* @__PURE__ */ jsxRuntimeExports.jsx(ScriptProgressStepper, { progress: scriptProgress }),
       error && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm max-w-md", children: error }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "textarea",
@@ -7574,6 +7616,54 @@ function StoryboardEditor() {
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-auto p-6", children: chapters[selectedChapter] && /* @__PURE__ */ jsxRuntimeExports.jsx(ChapterDetail, { chapter: chapters[selectedChapter] }) })
     ] })
   ] });
+}
+const LAYER_INFO = [
+  { id: 1, label: "故事大纲", desc: "分析创意，生成角色和故事线" },
+  { id: 2, label: "章节拆解", desc: "拆解章节和分镜脚本" },
+  { id: 3, label: "分镜细化", desc: "细化镜头语言和台词" },
+  { id: 4, label: "提示词组装", desc: "生成图像提示词" }
+];
+function ScriptProgressStepper({ progress }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full max-w-lg mb-6", children: LAYER_INFO.map((layer, i) => {
+    const isDone = progress.layer > layer.id || progress.layer === layer.id && progress.status === "done";
+    const isActive = progress.layer === layer.id && progress.status === "start";
+    const isError = progress.layer === layer.id && progress.status === "error";
+    progress.layer < layer.id;
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${isDone ? "bg-green-600 text-white" : isActive ? "bg-primary-600 text-white animate-pulse" : isError ? "bg-red-600 text-white" : "bg-dark-700 text-dark-500"}`, children: isDone ? "✓" : isError ? "✗" : layer.id }),
+        i < LAYER_INFO.length - 1 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `w-0.5 flex-1 min-h-[24px] ${isDone ? "bg-green-600" : "bg-dark-700"}` })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `pb-4 ${i < LAYER_INFO.length - 1 ? "" : ""}`, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `text-sm font-medium ${isDone ? "text-green-400" : isActive ? "text-primary-400" : isError ? "text-red-400" : "text-dark-500"}`, children: layer.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `text-xs mt-0.5 ${isActive ? "text-dark-300" : "text-dark-500"}`, children: isDone && progress.layer === layer.id && progress.message ? progress.message : isActive ? progress.message || layer.desc + "..." : isError ? progress.message || "生成失败" : layer.desc }),
+        isDone && progress.layer === layer.id && progress.data && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 text-xs space-y-0.5", children: [
+          progress.data.logline && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-dark-300", children: [
+            "📝 ",
+            String(progress.data.logline)
+          ] }),
+          progress.data.characterNames && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-dark-300", children: [
+            "👤 角色: ",
+            progress.data.characterNames.join("、")
+          ] }),
+          progress.data.chapterTitles && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-dark-300", children: [
+            "📖 章节: ",
+            progress.data.chapterTitles.join("、")
+          ] }),
+          progress.data.totalShots && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-dark-300", children: [
+            "🎬 共 ",
+            String(progress.data.totalShots),
+            " 个分镜"
+          ] })
+        ] }),
+        isActive && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1 mt-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-primary-500 animate-bounce", style: { animationDelay: "0ms" } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-primary-500 animate-bounce", style: { animationDelay: "150ms" } }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-1.5 h-1.5 rounded-full bg-primary-500 animate-bounce", style: { animationDelay: "300ms" } })
+        ] })
+      ] })
+    ] }, layer.id);
+  }) });
 }
 function ChapterDetail({ chapter }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -7675,17 +7765,79 @@ function ShotCard({ shot, index }) {
     ] })
   ] });
 }
+const api$2 = () => window.electronAPI;
 function CharacterCard({ character }) {
   const d = character.appearanceDetail;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-700 rounded-xl p-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full aspect-square bg-dark-700 rounded-lg mb-3 flex items-center justify-center overflow-hidden", children: character.referenceImage ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "img",
-      {
-        src: `file://${character.referenceImage}`,
-        alt: character.name,
-        className: "w-full h-full object-cover"
+  const { refreshProject } = useProjectStore();
+  const [generating, setGenerating] = reactExports.useState(false);
+  const [imageSrc, setImageSrc] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    if (character.referenceImage && api$2()) {
+      api$2().project.get().then((proj) => {
+        const char = proj?.characters?.find((c) => c.id === character.id);
+        if (char?.imageDataUrl) {
+          setImageSrc(char.imageDataUrl);
+        }
+      });
+    }
+  }, [character.referenceImage, character.id]);
+  const buildPrompt = () => {
+    const parts = [];
+    if (d.gender) parts.push(d.gender);
+    if (d.age) parts.push(`${d.age} years old`);
+    if (d.build) parts.push(d.build);
+    if (d.face) parts.push(d.face);
+    if (d.hair) parts.push(d.hair);
+    if (d.eyes) parts.push(d.eyes);
+    if (d.clothing) parts.push(`wearing ${d.clothing}`);
+    if (d.distinctiveFeatures) parts.push(d.distinctiveFeatures);
+    return `portrait of ${parts.join(", ")}, high quality, detailed face, anime style`;
+  };
+  const generateImage = async () => {
+    if (!api$2()) return;
+    setGenerating(true);
+    try {
+      const prompt = buildPrompt();
+      const result = await api$2().sidecar.generateImage({
+        prompt,
+        characterId: character.id
+      });
+      if (result.ok) {
+        if (result.dataUrl) {
+          setImageSrc(result.dataUrl);
+        }
+        const proj = await api$2().project.get();
+        await api$2().project.update({
+          characters: proj.characters.map(
+            (c) => c.id === character.id ? { ...c, referenceImage: result.path, imageDataUrl: result.dataUrl } : c
+          )
+        });
+        await refreshProject();
+      } else {
+        alert(`生成失败: ${result.error}`);
       }
-    ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-dark-500 text-sm", children: "暂无基准图" }) }),
+    } catch (err) {
+      alert(`生成异常: ${err.message}`);
+    } finally {
+      setGenerating(false);
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-700 rounded-xl p-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full aspect-square bg-dark-700 rounded-lg mb-3 flex items-center justify-center overflow-hidden relative", children: [
+      imageSrc && !generating ? /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: imageSrc, alt: character.name, className: "w-full h-full object-cover" }) : generating ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-primary-400", children: "正在生成..." })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-dark-500 text-sm", children: "暂无基准图" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: generateImage,
+          disabled: generating,
+          className: "absolute bottom-2 right-2 px-3 py-1.5 bg-primary-600/90 hover:bg-primary-700 disabled:opacity-50 rounded-lg text-white text-xs font-medium transition-colors backdrop-blur-sm",
+          children: generating ? "生成中..." : imageSrc ? "重新生成" : "生成基准图"
+        }
+      )
+    ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-white", children: character.name }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-dark-400 mt-1", children: character.id }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-1 text-xs text-dark-400", children: [
@@ -7715,7 +7867,7 @@ function CharacterCard({ character }) {
   ] });
 }
 function PipelineProgress() {
-  const { currentProject, startPipeline, pipelineProgress, loading, error } = useProjectStore();
+  const { currentProject, startPipeline, pipelineProgress, loading, error, refreshProject } = useProjectStore();
   if (!currentProject) return null;
   const state = currentProject.pipelineState;
   const total = state.totalShots;
@@ -7731,24 +7883,40 @@ function PipelineProgress() {
     done: "完成",
     error: "错误"
   };
+  const canStart = state.phase === "idle" || state.phase === "done" || state.phase === "error" || failed > 0;
+  const resetAndStart = async () => {
+    if (!window.electronAPI) return;
+    if (currentProject.script) {
+      const chapters = currentProject.script.chapters.map((ch) => ({
+        ...ch,
+        shots: ch.shots.map((s) => s.status === "failed" ? { ...s, status: "pending" } : s)
+      }));
+      await window.electronAPI.project.update({
+        script: { chapters },
+        pipelineState: { phase: "idle", totalShots: 0, completedShots: 0, failedShots: 0, estimatedRemainingSec: 0 }
+      });
+      await refreshProject();
+    }
+    startPipeline();
+  };
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full overflow-auto p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-2xl mx-auto", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold mb-6", children: "渲染进度" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6 mb-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-400", children: "当前阶段" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-lg font-semibold text-white", children: phaseLabel[state.phase] || state.phase })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-lg font-semibold ${state.phase === "error" ? "text-red-400" : "text-white"}`, children: phaseLabel[state.phase] || state.phase })
         ] }),
-        state.phase === "idle" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        canStart && /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
-            onClick: startPipeline,
+            onClick: resetAndStart,
             disabled: loading || !currentProject.script,
             className: "px-6 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg text-white font-medium transition-colors",
-            children: "开始渲染"
+            children: state.phase === "idle" ? "开始渲染" : "重新渲染"
           }
         ),
-        loading && state.phase !== "idle" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-yellow-400 text-sm animate-pulse", children: "运行中..." })
+        loading && !canStart && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-yellow-400 text-sm animate-pulse", children: "运行中..." })
       ] }),
       total > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-between text-sm text-dark-400 mb-2", children: [
@@ -7798,7 +7966,8 @@ const TABS = [
   { id: "characters", label: "角色管理" },
   { id: "render", label: "渲染进度" },
   { id: "preview", label: "预览" },
-  { id: "export", label: "导出" }
+  { id: "export", label: "导出" },
+  { id: "test", label: "模型测试" }
 ];
 function WorkspacePage() {
   const { currentProject, activeTab, setActiveTab } = useProjectStore();
@@ -7815,12 +7984,13 @@ function WorkspacePage() {
       },
       tab.id
     )) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-hidden", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-auto", children: [
       activeTab === "script" && /* @__PURE__ */ jsxRuntimeExports.jsx(StoryboardEditor, {}),
       activeTab === "characters" && /* @__PURE__ */ jsxRuntimeExports.jsx(CharacterManager, {}),
       activeTab === "render" && /* @__PURE__ */ jsxRuntimeExports.jsx(PipelineProgress, {}),
       activeTab === "preview" && /* @__PURE__ */ jsxRuntimeExports.jsx(PreviewPanel, {}),
-      activeTab === "export" && /* @__PURE__ */ jsxRuntimeExports.jsx(ExportPanel, {})
+      activeTab === "export" && /* @__PURE__ */ jsxRuntimeExports.jsx(ExportPanel, {}),
+      activeTab === "test" && /* @__PURE__ */ jsxRuntimeExports.jsx(ModelTestPanel, {})
     ] })
   ] });
 }
@@ -7842,6 +8012,183 @@ function ExportPanel() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full flex items-center justify-center text-dark-400", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-lg mb-2", children: "导出设置" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "渲染完成后可在此导出最终视频" })
+  ] }) });
+}
+const api$1 = () => window.electronAPI;
+const MODEL_TESTS = [
+  {
+    id: "image",
+    title: "文生图",
+    desc: "测试文生图模型（DashScope wan2.7-image-pro）",
+    placeholder: "一只橘猫坐在窗台上晒太阳",
+    fields: []
+  },
+  {
+    id: "i2v",
+    title: "图生视频",
+    desc: "测试图生视频模型（DashScope wan2.6-i2v-flash），需要先生成一张基准图",
+    placeholder: "一只可爱的小猫在阳光下伸懒腰，镜头缓慢拉远",
+    fields: [{ key: "duration", label: "时长(秒)", default: 5, min: 3, max: 15 }]
+  },
+  {
+    id: "video",
+    title: "文生视频",
+    desc: "测试文生视频模型（DashScope happyhorse-1.0-t2v）",
+    placeholder: "一座微型城市在夜晚焕发生机，硬纸板火车缓缓驶过",
+    fields: [{ key: "duration", label: "时长(秒)", default: 5, min: 3, max: 15 }]
+  },
+  {
+    id: "tts",
+    title: "语音合成 (TTS)",
+    desc: "测试 TTS 模型（CosyVoice）",
+    placeholder: "你好，欢迎使用视频AI工作室。",
+    fields: []
+  }
+];
+function ModelTestPanel() {
+  const [testStates, setTestStates] = reactExports.useState({
+    image: { prompt: "一只橘猫坐在窗台上晒太阳，温暖的阳光照在毛发上", loading: false, result: null, extra: {}, imageUrl: "" },
+    i2v: { prompt: "一只可爱的小猫在阳光下伸懒腰，镜头缓慢拉远", loading: false, result: null, extra: { duration: 5 }, imageUrl: "" },
+    video: { prompt: "一座微型城市在夜晚焕发生机，硬纸板火车缓缓驶过", loading: false, result: null, extra: { duration: 5 }, imageUrl: "" },
+    tts: { prompt: "你好，欢迎使用视频AI工作室。", loading: false, result: null, extra: {}, imageUrl: "" }
+  });
+  const runTest = async (testId) => {
+    if (!api$1()) return;
+    const state = testStates[testId];
+    setTestStates((prev) => ({ ...prev, [testId]: { ...prev[testId], loading: true, result: null } }));
+    const startTime = Date.now();
+    try {
+      let result;
+      if (testId === "image") {
+        result = await api$1().sidecar.generateImage({ prompt: state.prompt, characterId: `test_${Date.now()}` });
+      } else if (testId === "i2v") {
+        if (!state.imageUrl) {
+          setTestStates((prev) => ({ ...prev, [testId]: { ...prev[testId], loading: false, result: { ok: false, msg: "请先生成一张图片作为首帧" } } }));
+          return;
+        }
+        result = await api$1().sidecar.generateI2V({ prompt: state.prompt, imageUrl: state.imageUrl, duration: state.extra.duration || 5 });
+      } else if (testId === "video") {
+        result = await api$1().sidecar.generateVideo({ prompt: state.prompt, duration: state.extra.duration || 5 });
+      } else if (testId === "tts") {
+        result = await api$1().sidecar.health();
+      }
+      const elapsed = ((Date.now() - startTime) / 1e3).toFixed(1);
+      if (result?.ok) {
+        setTestStates((prev) => {
+          const update = {
+            ...prev,
+            [testId]: { ...prev[testId], loading: false, result: { ok: true, msg: `成功 (${elapsed}s)`, duration: Number(elapsed), path: result.path } }
+          };
+          if (testId === "image" && result.path) {
+            update.i2v = { ...prev.i2v, imageUrl: result.path };
+          }
+          return update;
+        });
+      } else {
+        setTestStates((prev) => ({
+          ...prev,
+          [testId]: { ...prev[testId], loading: false, result: { ok: false, msg: result?.error || "未知错误" } }
+        }));
+      }
+    } catch (err) {
+      setTestStates((prev) => ({
+        ...prev,
+        [testId]: { ...prev[testId], loading: false, result: { ok: false, msg: err.message } }
+      }));
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full overflow-auto p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-2xl mx-auto", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold mb-2", children: "模型测试" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-6", children: "测试各模型接口是否能正常调用。请先在设置页配置好对应的 API Key 并启动 Sidecar。" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-6", children: MODEL_TESTS.map((test) => {
+      const state = testStates[test.id];
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-700 rounded-xl p-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-white mb-1", children: test.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-xs mb-3", children: test.desc }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "Prompt" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "textarea",
+              {
+                value: state.prompt,
+                onChange: (e) => setTestStates((prev) => ({ ...prev, [test.id]: { ...prev[test.id], prompt: e.target.value, result: null } })),
+                rows: 2,
+                className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500 resize-none"
+              }
+            )
+          ] }),
+          test.id === "i2v" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "首帧图片路径（先在文生图测试中生成）" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                value: state.imageUrl || "",
+                onChange: (e) => setTestStates((prev) => ({ ...prev, [test.id]: { ...prev[test.id], imageUrl: e.target.value, result: null } })),
+                placeholder: "先运行文生图测试，自动生成后填入",
+                className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none focus:border-primary-500"
+              }
+            ),
+            state.imageUrl && /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: `file:///${state.imageUrl.replace(/^\/+/, "").replace(/\\/g, "/")}`, alt: "首帧", className: "w-24 h-24 mt-2 object-cover rounded border border-dark-600" })
+          ] }),
+          test.fields.map((field) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: field.label }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                type: "number",
+                value: state.extra[field.key] || field.default,
+                onChange: (e) => setTestStates((prev) => ({
+                  ...prev,
+                  [test.id]: { ...prev[test.id], extra: { ...prev[test.id].extra, [field.key]: Number(e.target.value) }, result: null }
+                })),
+                min: field.min,
+                max: field.max,
+                className: "w-32 px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+              }
+            )
+          ] }, field.key)),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => runTest(test.id),
+                disabled: state.loading,
+                className: "px-5 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg text-white text-sm font-medium transition-colors",
+                children: state.loading ? "测试中..." : "开始测试"
+              }
+            ),
+            state.result && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: `text-sm ${state.result.ok ? "text-green-400" : "text-red-400"}`, children: [
+              state.result.ok ? "✓" : "✗",
+              " ",
+              state.result.msg
+            ] })
+          ] }),
+          state.result?.ok && state.result.path && test.id === "image" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-dark-500 mb-1", children: "生成结果:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "img",
+              {
+                src: `file:///${state.result.path.replace(/^\/+/, "").replace(/\\/g, "/")}`,
+                alt: "test result",
+                className: "w-40 h-40 object-cover rounded-lg border border-dark-600"
+              }
+            )
+          ] }),
+          state.result?.ok && state.result.path && test.id === "video" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-dark-500 mb-1", children: "生成结果:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "video",
+              {
+                src: `file:///${state.result.path.replace(/^\/+/, "").replace(/\\/g, "/")}`,
+                controls: true,
+                className: "w-64 rounded-lg border border-dark-600"
+              }
+            )
+          ] })
+        ] })
+      ] }, test.id);
+    }) })
   ] }) });
 }
 const api = () => window.electronAPI;
@@ -7884,16 +8231,25 @@ const MODEL_PROVIDERS = {
       value: "dashscope",
       label: "阿里百炼 - 北京",
       baseUrl: "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
-      models: ["wan2.7-image-pro", "wan2.1-image-plus", "wanx-v1"]
+      models: [
+        "wan2.7-image-pro",
+        "wan2.7-image",
+        "qwen-image-2.0-pro",
+        "qwen-image-2.0",
+        "qwen-image-max",
+        "qwen-image-plus",
+        "qwen-image-edit-max",
+        "qwen-image-edit-plus",
+        "z-image-turbo"
+      ]
     },
     {
       value: "dashscope-intl",
       label: "阿里百炼 - 新加坡",
       baseUrl: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
-      models: ["wan2.7-image-pro", "wan2.1-image-plus", "wanx-v1"]
+      models: ["wan2.7-image-pro", "wan2.7-image", "qwen-image-2.0-pro", "qwen-image-2.0"]
     },
     { value: "comfyui", label: "ComfyUI", baseUrl: "http://127.0.0.1:8188" },
-    { value: "midjourney", label: "Midjourney API" },
     { value: "custom", label: "自定义" }
   ],
   imageToVideo: [
@@ -7901,13 +8257,13 @@ const MODEL_PROVIDERS = {
       value: "dashscope",
       label: "阿里百炼 - 北京",
       baseUrl: "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
-      models: ["wanx2.1-i2v-turbo", "wanx2.1-i2v-plus"]
+      models: ["wan2.6-i2v-flash", "wan2.2-kf2v-flash", "wanx2.1-i2v-turbo", "wanx2.1-i2v-plus"]
     },
     {
       value: "dashscope-intl",
       label: "阿里百炼 - 新加坡",
       baseUrl: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
-      models: ["wanx2.1-i2v-turbo", "wanx2.1-i2v-plus"]
+      models: ["wan2.6-i2v-flash", "wan2.2-kf2v-flash", "wanx2.1-i2v-turbo", "wanx2.1-i2v-plus"]
     },
     { value: "kling", label: "快手可灵" },
     { value: "jimeng", label: "字节即梦" },
@@ -7918,13 +8274,13 @@ const MODEL_PROVIDERS = {
       value: "dashscope",
       label: "阿里百炼 - 北京",
       baseUrl: "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
-      models: ["wanx2.1-t2v-turbo", "wanx2.1-t2v-plus"]
+      models: ["happyhorse-1.0-t2v", "wanx2.1-t2v-turbo", "wanx2.1-t2v-plus"]
     },
     {
       value: "dashscope-intl",
       label: "阿里百炼 - 新加坡",
       baseUrl: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis",
-      models: ["wanx2.1-t2v-turbo", "wanx2.1-t2v-plus"]
+      models: ["happyhorse-1.0-t2v", "wanx2.1-t2v-turbo", "wanx2.1-t2v-plus"]
     },
     { value: "kling", label: "快手可灵" },
     { value: "jimeng", label: "字节即梦" },
@@ -7933,15 +8289,28 @@ const MODEL_PROVIDERS = {
   tts: [
     {
       value: "dashscope",
-      label: "阿里百炼 (CosyVoice) - 北京",
+      label: "阿里百炼 - 北京",
       baseUrl: "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2speech/generation",
-      models: ["cosyvoice-v1", "sambert"]
+      models: [
+        "qwen3-tts-flash",
+        "qwen3-tts-instruct-flash",
+        "qwen3-tts-vd",
+        "qwen3-tts-vc",
+        "qwen-tts",
+        "cosyvoice-v1",
+        "sambert"
+      ]
     },
     {
       value: "dashscope-intl",
-      label: "阿里百炼 (CosyVoice) - 新加坡",
+      label: "阿里百炼 - 新加坡",
       baseUrl: "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text2speech/generation",
-      models: ["cosyvoice-v1", "sambert"]
+      models: ["qwen3-tts-flash", "cosyvoice-v1", "sambert"]
+    },
+    {
+      value: "minimax",
+      label: "MiniMax",
+      models: ["speech-02-hd", "speech-02-turbo", "speech-2.8-hd", "speech-2.8-turbo"]
     },
     { value: "fishspeech", label: "Fish Speech" },
     { value: "custom", label: "自定义" }
@@ -7956,6 +8325,8 @@ const AI_SECTIONS = [
 function SettingsPage() {
   const [sidecarStatus, setSidecarStatus] = reactExports.useState("未启动");
   const [ffmpegStatus, setFfmpegStatus] = reactExports.useState("检测中...");
+  const [workspacePath, setWorkspacePath] = reactExports.useState("");
+  const [workspaceIsDefault, setWorkspaceIsDefault] = reactExports.useState(true);
   const [llmConfigs, setLlmConfigs] = reactExports.useState([]);
   const [llmEditing, setLlmEditing] = reactExports.useState(null);
   const [llmTesting, setLlmTesting] = reactExports.useState(false);
@@ -7979,7 +8350,26 @@ function SettingsPage() {
     checkSidecar();
     loadLlmConfigs();
     loadAIModelConfigs();
+    loadWorkspace();
   }, []);
+  const loadWorkspace = async () => {
+    if (!api()) return;
+    try {
+      const ws = await api().workspace.get();
+      setWorkspacePath(ws.path);
+      setWorkspaceIsDefault(ws.isDefault);
+    } catch {
+    }
+  };
+  const changeWorkspace = async () => {
+    if (!api()) return;
+    const dir = await api().dialog.openDirectory();
+    if (dir) {
+      await api().workspace.set(dir);
+      setWorkspacePath(dir);
+      setWorkspaceIsDefault(false);
+    }
+  };
   const checkFfmpeg = async () => {
     const result = await api().ffmpeg.detect();
     setFfmpegStatus(result.available ? result.version || "可用" : "未安装");
@@ -8152,10 +8542,17 @@ function SettingsPage() {
   };
   const testPing = async () => {
     try {
-      const result = await api().sidecar.ping();
-      alert(`IPC 连通! ${JSON.stringify(result)}`);
+      const result = await api().sidecar.health();
+      if (result.status === "ok") {
+        alert(`Sidecar 运行中!
+模式: ${result.mode}
+GPU: ${result.gpu ? "是" : "否"}`);
+      } else {
+        alert(`Sidecar 未运行或不可达
+状态: ${result.status}`);
+      }
     } catch (err) {
-      alert(`IPC 失败: ${err.message}`);
+      alert(`连接失败: ${err.message}`);
     }
   };
   const startSidecar = async () => {
@@ -8166,6 +8563,15 @@ function SettingsPage() {
       setSidecarStatus(result.ready ? `运行中 (${result.mode})` : `失败: ${result.error || "未知错误"}`);
     } catch (err) {
       setSidecarStatus(`异常: ${err.message}`);
+    }
+  };
+  const stopSidecar = async () => {
+    if (!api()) return;
+    try {
+      await api().sidecar.stop();
+      setSidecarStatus("已停止");
+    } catch (err) {
+      setSidecarStatus(`停止失败: ${err.message}`);
     }
   };
   const onProviderChange = (sectionId, providerValue) => {
@@ -8281,6 +8687,22 @@ function SettingsPage() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full overflow-auto p-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-2xl mx-auto space-y-8", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-bold", children: "设置" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "工作空间" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-3", children: "项目文件存储位置。更改后新项目将创建在新路径。" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-dark-300 text-sm truncate", children: workspacePath || "加载中..." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: changeWorkspace,
+            className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors flex-shrink-0",
+            children: "更改路径"
+          }
+        )
+      ] }),
+      !workspaceIsDefault && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-yellow-400/70 text-xs mt-2", children: "⚠ 已使用自定义路径，重启应用后生效" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "Python Sidecar" }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-dark-400 text-sm", children: [
@@ -8288,8 +8710,9 @@ function SettingsPage() {
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-white", children: sidecarStatus })
         ] }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: testPing, className: "px-3 py-2 bg-dark-600 hover:bg-dark-500 rounded-lg text-white text-sm transition-colors", children: "测试连接" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: startSidecar, className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors", children: "启动 Sidecar" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: testPing, className: "px-3 py-2 bg-dark-600 hover:bg-dark-500 rounded-lg text-white text-sm transition-colors", children: "检测状态" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: startSidecar, className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors", children: "启动 Sidecar" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: stopSidecar, className: "px-4 py-2 bg-red-900/50 hover:bg-red-900/80 rounded-lg text-red-300 text-sm transition-colors", children: "关闭 Sidecar" })
         ] })
       ] })
     ] }),

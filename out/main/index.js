@@ -3,7 +3,7 @@ import { join, dirname } from "path";
 import { is } from "@electron-toolkit/utils";
 import { promises, existsSync, mkdirSync, appendFileSync } from "fs";
 import { randomUUID } from "crypto";
-import { spawn, execFile } from "child_process";
+import { spawn, execSync, execFile } from "child_process";
 import { EventEmitter } from "events";
 import { createServer } from "net";
 import __cjs_mod__ from "node:module";
@@ -13,9 +13,37 @@ const require2 = __cjs_mod__.createRequire(import.meta.url);
 class ProjectManager {
   project = null;
   projectPath = null;
-  /** 默认项目存储目录 */
-  get projectsDir() {
+  customWorkspace = null;
+  get defaultWorkspace() {
     return join(app.getPath("documents"), "VideoAIStudio", "projects");
+  }
+  /** 当前工作空间目录 */
+  get projectsDir() {
+    return this.customWorkspace || this.defaultWorkspace;
+  }
+  /** 加载工作空间配置 */
+  async loadWorkspace() {
+    try {
+      const configPath = join(app.getPath("userData"), "workspace.json");
+      const data = await promises.readFile(configPath, "utf-8");
+      const config = JSON.parse(data);
+      if (config.path) {
+        this.customWorkspace = config.path;
+        await promises.mkdir(config.path, { recursive: true });
+      }
+    } catch {
+    }
+  }
+  /** 获取当前工作空间路径 */
+  getWorkspacePath() {
+    return this.projectsDir;
+  }
+  /** 设置工作空间路径 */
+  async setWorkspacePath(path) {
+    await promises.mkdir(path, { recursive: true });
+    this.customWorkspace = path;
+    const configPath = join(app.getPath("userData"), "workspace.json");
+    await promises.writeFile(configPath, JSON.stringify({ path }, null, 2), "utf-8");
   }
   /** 确保项目目录存在 */
   async ensureDir(dir) {
@@ -103,17 +131,15 @@ class ProjectManager {
   getProjectPath() {
     return this.projectPath;
   }
-  /** 原子写入 project.json */
+  /** 保存 project.json（Windows 兼容） */
   async saveProject() {
     if (!this.project || !this.projectPath) {
       throw new Error("No project loaded");
     }
     this.project.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    const tmpPath = join(this.projectPath, ".project.json.tmp");
     const realPath = join(this.projectPath, "project.json");
     const content = JSON.stringify(this.project, null, 2);
-    await promises.writeFile(tmpPath, content, "utf-8");
-    await promises.rename(tmpPath, realPath);
+    await promises.writeFile(realPath, content, "utf-8");
   }
   /** 更新项目（合并部分数据） */
   async updateProject(partial) {
@@ -302,11 +328,19 @@ ${candidates.join("\n")}`
   }
   /** 停止 Sidecar */
   stop() {
-    if (this.process) {
-      this.process.kill();
-      this.process = null;
-      this.ready = false;
+    if (!this.process) return;
+    const pid = this.process.pid;
+    try {
+      if (process.platform === "win32" && pid) {
+        execSync(`taskkill /F /T /PID ${pid}`, { stdio: "ignore" });
+      } else {
+        this.process.kill("SIGKILL");
+      }
+    } catch {
     }
+    this.process = null;
+    this.ready = false;
+    console.log(`[PythonSpawner] Sidecar stopped (pid=${pid})`);
   }
   get isReady() {
     return this.ready;
@@ -625,6 +659,61 @@ class PromptBuilder {
     }));
   }
 }
+function repairTruncatedJSON(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+  }
+  let repaired = raw;
+  for (let i = repaired.length - 1; i >= 0; i--) {
+    if (repaired[i] === "}" || repaired[i] === "]") {
+      repaired = repaired.slice(0, i + 1);
+      break;
+    }
+  }
+  const stack = [];
+  for (const ch of repaired) {
+    if (ch === "{" || ch === "[") stack.push(ch);
+    else if (ch === "}") {
+      if (stack[stack.length - 1] === "{") stack.pop();
+    } else if (ch === "]") {
+      if (stack[stack.length - 1] === "[") stack.pop();
+    }
+  }
+  while (stack.length > 0) {
+    const open = stack.pop();
+    repaired += open === "{" ? "}" : "]";
+  }
+  try {
+    return JSON.parse(repaired);
+  } catch {
+  }
+  return null;
+}
+async function callLLMForJSON(client, messages, opts, emitProgress) {
+  const response = await client.chat(messages, opts);
+  const cleaned = response.content.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+  }
+  const repaired = repairTruncatedJSON(cleaned);
+  if (repaired) return repaired;
+  emitProgress("输出被截断，正在续写...");
+  const continueMessages = [
+    ...messages,
+    { role: "assistant", content: response.content },
+    { role: "user", content: "你的上一条回复被截断了。请从断点处继续，输出剩余的 JSON 内容。不要重复已经输出的部分，直接从断点继续。只输出 JSON，不要其他文字。" }
+  ];
+  const continuation = await client.chat(continueMessages, opts);
+  const contCleaned = continuation.content.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
+  const combined = cleaned + contCleaned;
+  try {
+    return JSON.parse(combined);
+  } catch {
+  }
+  return repairTruncatedJSON(combined);
+}
 class ScriptOptimizer extends EventEmitter {
   client;
   constructor(config) {
@@ -633,34 +722,53 @@ class ScriptOptimizer extends EventEmitter {
   }
   /** Layer 1: 故事解析 */
   async generateOutline(userInput) {
-    this.emit("progress", { layer: 1, status: "start" });
+    this.emit("progress", { layer: 1, status: "start", message: "正在分析故事创意，生成大纲..." });
     const messages = buildLayer1Messages(userInput);
-    const response = await this.client.chat(messages, { temperature: 0.8, maxTokens: 4e3 });
     let outline;
     try {
-      const cleaned = response.content.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
-      outline = JSON.parse(cleaned);
+      const parsed = await callLLMForJSON(
+        this.client,
+        messages,
+        { temperature: 0.8, maxTokens: 8192 },
+        (msg) => this.emit("progress", { layer: 1, status: "start", message: msg })
+      );
+      outline = parsed;
     } catch {
-      throw new Error("Layer 1: LLM 返回的 JSON 解析失败。原始内容: " + response.content.slice(0, 500));
+      this.emit("progress", { layer: 1, status: "error", message: "大纲 JSON 解析失败" });
+      throw new Error("Layer 1: LLM 返回的 JSON 解析失败");
     }
     outline.characters = outline.characters.map((c, i) => ({
       ...c,
       id: c.id || `char_${i + 1}`
     }));
-    this.emit("progress", { layer: 1, status: "done" });
+    this.emit("progress", {
+      layer: 1,
+      status: "done",
+      message: `大纲生成完成 — ${outline.characters.length} 个角色`,
+      data: {
+        logline: outline.logline,
+        characterCount: outline.characters.length,
+        characterNames: outline.characters.map((c) => c.name)
+      }
+    });
     return outline;
   }
   /** Layer 2: 章节拆解 */
   async generateChapters(outline) {
-    this.emit("progress", { layer: 2, status: "start" });
+    this.emit("progress", { layer: 2, status: "start", message: "正在拆解章节和分镜..." });
     const messages = buildLayer2Messages(outline);
-    const response = await this.client.chat(messages, { temperature: 0.7, maxTokens: 8e3 });
     let chapters;
     try {
-      const cleaned = response.content.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
-      chapters = JSON.parse(cleaned);
+      const parsed = await callLLMForJSON(
+        this.client,
+        messages,
+        { temperature: 0.7, maxTokens: 8192 },
+        (msg) => this.emit("progress", { layer: 2, status: "start", message: msg })
+      );
+      chapters = parsed;
     } catch {
-      throw new Error("Layer 2: LLM 返回的 JSON 解析失败。原始内容: " + response.content.slice(0, 500));
+      this.emit("progress", { layer: 2, status: "error", message: "章节 JSON 解析失败" });
+      throw new Error("Layer 2: LLM 返回的 JSON 解析失败");
     }
     for (const chapter of chapters) {
       for (const shot of chapter.shots) {
@@ -668,20 +776,35 @@ class ScriptOptimizer extends EventEmitter {
         shot.assets = shot.assets || {};
       }
     }
-    this.emit("progress", { layer: 2, status: "done" });
+    const totalShots = chapters.reduce((sum, ch) => sum + ch.shots.length, 0);
+    this.emit("progress", {
+      layer: 2,
+      status: "done",
+      message: `章节拆解完成 — ${chapters.length} 章，共 ${totalShots} 个分镜`,
+      data: {
+        chapterCount: chapters.length,
+        totalShots,
+        chapterTitles: chapters.map((ch) => ch.title)
+      }
+    });
     return chapters;
   }
   /** Layer 3: 分镜细化（镜头语言 + 台词润色） */
   async refineShots(chapters) {
-    this.emit("progress", { layer: 3, status: "start" });
+    this.emit("progress", { layer: 3, status: "start", message: "正在细化镜头语言和台词..." });
     const messages = buildLayer3Messages(chapters);
-    const response = await this.client.chat(messages, { temperature: 0.7, maxTokens: 12e3 });
     let refined;
     try {
-      const cleaned = response.content.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
-      refined = JSON.parse(cleaned);
+      const parsed = await callLLMForJSON(
+        this.client,
+        messages,
+        { temperature: 0.7, maxTokens: 8192 },
+        (msg) => this.emit("progress", { layer: 3, status: "start", message: msg })
+      );
+      refined = parsed;
     } catch {
-      throw new Error("Layer 3: LLM 返回的 JSON 解析失败。原始内容: " + response.content.slice(0, 500));
+      this.emit("progress", { layer: 3, status: "error", message: "分镜细化 JSON 解析失败" });
+      throw new Error("Layer 3: LLM 返回的 JSON 解析失败");
     }
     for (let i = 0; i < refined.length; i++) {
       for (let j = 0; j < refined[i].shots.length; j++) {
@@ -692,17 +815,27 @@ class ScriptOptimizer extends EventEmitter {
         }
       }
     }
-    this.emit("progress", { layer: 3, status: "done" });
+    this.emit("progress", {
+      layer: 3,
+      status: "done",
+      message: "分镜细化完成 — 镜头语言和台词已润色"
+    });
     return refined;
   }
   /** Layer 4: SD Prompt 组装（纯规则引擎，无需 LLM） */
   buildPrompts(chapters, characters, style = "anime") {
-    this.emit("progress", { layer: 4, status: "start" });
+    this.emit("progress", { layer: 4, status: "start", message: "正在组装图像生成提示词..." });
     const result = chapters.map((chapter) => ({
       ...chapter,
       shots: PromptBuilder.buildAll(chapter.shots, characters, style)
     }));
-    this.emit("progress", { layer: 4, status: "done" });
+    const totalShots = result.reduce((sum, ch) => sum + ch.shots.length, 0);
+    this.emit("progress", {
+      layer: 4,
+      status: "done",
+      message: `剧本生成全部完成！共 ${totalShots} 个分镜`,
+      data: { totalShots }
+    });
     return result;
   }
   /** 完整 4 层生成流程 */
@@ -954,13 +1087,14 @@ class PipelineRunner extends EventEmitter {
   }
   /** 渲染单个分镜 */
   async renderShot(shot) {
-    this.projectManager.getProjectPath();
     const shotDir = await this.projectManager.ensureShotDir(shot.id);
     if (!this.sidecar.isReady) {
-      logger.warn(`Sidecar not ready, skipping shot ${shot.id}`);
-      return;
+      logger.warn(`[${shot.id}] Sidecar not ready, skipping`);
+      throw new Error("Sidecar 未启动");
     }
+    logger.info(`[${shot.id}] 开始渲染 shotType=${shot.shotType}, duration=${shot.durationSec}s`);
     if (shot.imagePrompt) {
+      logger.info(`[${shot.id}] 调用 /generate_image prompt=${shot.imagePrompt.positive.slice(0, 80)}...`);
       const imgResult = await this.sidecar.call("/generate_image", {
         prompt: shot.imagePrompt.positive,
         negative_prompt: shot.imagePrompt.negative,
@@ -968,11 +1102,13 @@ class PipelineRunner extends EventEmitter {
         output_dir: shotDir
       });
       shot.assets.image = imgResult.path;
+      logger.info(`[${shot.id}] 图片生成完成: ${shot.assets.image}`);
     }
     switch (shot.shotType) {
       case "dialogue": {
         if (shot.dialogue.length > 0) {
           const text = shot.dialogue.map((d) => d.text).join(" ");
+          logger.info(`[${shot.id}] 调用 /generate_tts text=${text.slice(0, 50)}...`);
           const ttsResult = await this.sidecar.call("/generate_tts", {
             text,
             character_id: shot.dialogue[0].characterId,
@@ -980,13 +1116,16 @@ class PipelineRunner extends EventEmitter {
             output_dir: shotDir
           });
           shot.assets.audio = ttsResult.path;
+          logger.info(`[${shot.id}] TTS 完成: ${shot.assets.audio}`);
           if (shot.assets.image) {
+            logger.info(`[${shot.id}] 调用 /musetalk`);
             const lipResult = await this.sidecar.call("/musetalk", {
               image_path: shot.assets.image,
               audio_path: shot.assets.audio,
               output_dir: shotDir
             });
             shot.assets.video = lipResult.path;
+            logger.info(`[${shot.id}] 口型同步完成: ${shot.assets.video}`);
           }
         }
         break;
@@ -994,21 +1133,37 @@ class PipelineRunner extends EventEmitter {
       case "transition":
       case "establishing": {
         if (shot.assets.image) {
+          logger.info(`[${shot.id}] 调用 /depth_animate movement=${shot.camera?.movement}`);
           const depthResult = await this.sidecar.call("/depth_animate", {
             image_path: shot.assets.image,
             duration_sec: shot.durationSec,
-            movement: shot.camera.movement,
+            movement: shot.camera?.movement,
             output_dir: shotDir
           });
           shot.assets.video = depthResult.path;
+          logger.info(`[${shot.id}] 深度动画完成: ${shot.assets.video}`);
         }
         break;
       }
       case "action": {
-        logger.info(`Action shot ${shot.id} — video provider not yet implemented`);
+        logger.info(`[${shot.id}] 调用 /generate_video prompt=${shot.sceneDescription.slice(0, 80)}...`);
+        const videoResult = await this.sidecar.call("/generate_video", {
+          prompt: shot.sceneDescription,
+          duration: Math.min(shot.durationSec, 15),
+          output_dir: shotDir,
+          filename: shot.id
+        });
+        shot.assets.video = videoResult.path;
+        logger.info(`[${shot.id}] 视频生成完成: ${shot.assets.video}`);
         break;
       }
+      case "narration":
+      case "reaction":
+      default:
+        logger.info(`[${shot.id}] 静态镜头，无需额外处理`);
+        break;
     }
+    logger.info(`[${shot.id}] 渲染完成 assets=${JSON.stringify(shot.assets)}`);
   }
   // ── Phase 4: 组装导出 ──────────────────────────────────────
   async composite() {
@@ -1615,6 +1770,7 @@ app.whenReady().then(async () => {
   createWindow();
   registerIPC();
   await providerRegistry.load();
+  await projectManager.loadWorkspace();
   await aiModelConfig.load();
   await llmConfigManager.load();
   app.on("activate", () => {
@@ -1650,6 +1806,25 @@ function registerIPC() {
   });
   ipcMain.handle("project:update", async (_e, partial) => {
     await projectManager.updateProject(partial);
+    return { ok: true };
+  });
+  ipcMain.handle("project:delete", async (_e, projectPath) => {
+    const { rm } = await import("fs/promises");
+    try {
+      await rm(projectPath, { recursive: true, force: true });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+  ipcMain.handle("workspace:get", () => {
+    return {
+      path: projectManager.getWorkspacePath(),
+      isDefault: projectManager.getWorkspacePath() === join(app.getPath("documents"), "VideoAIStudio", "projects")
+    };
+  });
+  ipcMain.handle("workspace:set", async (_e, path) => {
+    await projectManager.setWorkspacePath(path);
     return { ok: true };
   });
   ipcMain.handle("script:generate", async (event, userInput, style) => {
@@ -1793,6 +1968,84 @@ function registerIPC() {
   ipcMain.handle("sidecar:stop", () => {
     pythonSpawner.stop();
     return { stopped: true };
+  });
+  ipcMain.handle("sidecar:generate-i2v", async (_e, params) => {
+    if (!pythonSpawner.isReady) return { ok: false, error: "Sidecar 未启动" };
+    try {
+      const outputDir = join(app.getPath("documents"), "VideoAIStudio", "projects", "videos");
+      const i2vConfig = await aiModelConfig.get("imageToVideo");
+      const apiKey = i2vConfig?.apiKey || "";
+      const model = i2vConfig?.modelName || "wan2.6-i2v-flash";
+      console.log(`[generate-i2v] model=${model}, hasKey=${!!apiKey}`);
+      const result = await pythonSpawner.call("/generate_i2v", {
+        prompt: params.prompt,
+        api_key: apiKey,
+        model,
+        image_url: params.imageUrl,
+        end_image_url: params.endImageUrl || "",
+        duration: params.duration || 5,
+        output_dir: outputDir,
+        filename: `i2v_${Date.now()}`
+      });
+      const videoPath = result.path.replace(/\\/g, "/");
+      console.log(`[generate-i2v] done, path=${videoPath}, mock=${result.mock}`);
+      return { ok: true, path: videoPath, mock: result.mock };
+    } catch (err) {
+      console.error("[generate-i2v] failed:", err.message);
+      return { ok: false, error: err.message };
+    }
+  });
+  ipcMain.handle("sidecar:generate-video", async (_e, params) => {
+    if (!pythonSpawner.isReady) return { ok: false, error: "Sidecar 未启动" };
+    try {
+      const outputDir = join(app.getPath("documents"), "VideoAIStudio", "projects", "videos");
+      const { readFile } = await import("fs/promises");
+      const videoConfig = await aiModelConfig.get("textToVideo");
+      const apiKey = videoConfig?.apiKey || "";
+      const model = videoConfig?.modelName || "happyhorse-1.0-t2v";
+      console.log(`[generate-video] model=${model}, hasKey=${!!apiKey}, duration=${params.duration || 5}s`);
+      const result = await pythonSpawner.call("/generate_video", {
+        prompt: params.prompt,
+        api_key: apiKey,
+        model,
+        duration: params.duration || 5,
+        output_dir: outputDir,
+        filename: `video_${Date.now()}`
+      });
+      const videoPath = result.path.replace(/\\/g, "/");
+      console.log(`[generate-video] done, path=${videoPath}, mock=${result.mock}`);
+      return { ok: true, path: videoPath, mock: result.mock };
+    } catch (err) {
+      console.error("[generate-video] failed:", err.message);
+      return { ok: false, error: err.message };
+    }
+  });
+  ipcMain.handle("sidecar:generate-image", async (_e, params) => {
+    if (!pythonSpawner.isReady) return { ok: false, error: "Sidecar 未启动" };
+    try {
+      const outputDir = join(app.getPath("documents"), "VideoAIStudio", "projects", "characters");
+      const { readFile } = await import("fs/promises");
+      const imgConfig = await aiModelConfig.get("textToImage");
+      const apiKey = imgConfig?.apiKey || "";
+      const model = imgConfig?.modelName || "wan2.7-image-pro";
+      console.log(`[generate-image] characterId=${params.characterId}, model=${model}, hasKey=${!!apiKey}`);
+      const result = await pythonSpawner.call("/generate_image", {
+        prompt: params.prompt,
+        character_id: params.characterId,
+        api_key: apiKey,
+        model,
+        output_dir: outputDir,
+        filename: params.characterId
+      });
+      const imagePath = result.path.replace(/\\/g, "/");
+      const imageBuffer = await readFile(imagePath);
+      const dataUrl = `data:image/png;base64,${imageBuffer.toString("base64")}`;
+      console.log(`[generate-image] done, path=${imagePath}, size=${imageBuffer.length}, mock=${result.mock}`);
+      return { ok: true, path: imagePath, dataUrl, mock: result.mock };
+    } catch (err) {
+      console.error("[generate-image] failed:", err.message);
+      return { ok: false, error: err.message };
+    }
   });
   ipcMain.handle("ai-model:list", async () => {
     return aiModelConfig.getAll();

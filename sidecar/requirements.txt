@@ -1,6 +1,9 @@
 # Mock mode: 只需要 Flask
 flask>=3.0.0
 
+# 阿里百炼 DashScope SDK
+dashscope>=1.20.0
+
 # 真实模式依赖 (取消注释即可)
 # torch>=2.4.0
 # diffusers>=0.30.0

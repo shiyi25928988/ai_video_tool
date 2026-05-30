@@ -26,7 +26,9 @@
       "Bash(xxd D:/AI_VEDIO_ASSI/ai_video_tool/start.bat)",
       "Bash(xxd D:/AI_VEDIO_ASSI/ai_video_tool/build.bat)",
       "Bash(xxd D:/AI_VEDIO_ASSI/ai_video_tool/clean.bat)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(pip install *)",
+      "Bash(xargs grep -A2 \"referenceImage\")"
     ]
   }
 }

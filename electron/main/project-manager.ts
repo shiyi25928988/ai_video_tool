@@ -17,10 +17,43 @@ export interface ProjectListItem {
 export class ProjectManager {
   private project: Project | null = null
   private projectPath: string | null = null
+  private customWorkspace: string | null = null
 
-  /** 默认项目存储目录 */
-  get projectsDir(): string {
+  private get defaultWorkspace(): string {
     return join(app.getPath('documents'), 'VideoAIStudio', 'projects')
+  }
+
+  /** 当前工作空间目录 */
+  get projectsDir(): string {
+    return this.customWorkspace || this.defaultWorkspace
+  }
+
+  /** 加载工作空间配置 */
+  async loadWorkspace(): Promise<void> {
+    try {
+      const configPath = join(app.getPath('userData'), 'workspace.json')
+      const data = await fs.readFile(configPath, 'utf-8')
+      const config = JSON.parse(data)
+      if (config.path) {
+        this.customWorkspace = config.path
+        await fs.mkdir(config.path, { recursive: true })
+      }
+    } catch {
+      // 使用默认路径
+    }
+  }
+
+  /** 获取当前工作空间路径 */
+  getWorkspacePath(): string {
+    return this.projectsDir
+  }
+
+  /** 设置工作空间路径 */
+  async setWorkspacePath(path: string): Promise<void> {
+    await fs.mkdir(path, { recursive: true })
+    this.customWorkspace = path
+    const configPath = join(app.getPath('userData'), 'workspace.json')
+    await fs.writeFile(configPath, JSON.stringify({ path }, null, 2), 'utf-8')
   }
 
   /** 确保项目目录存在 */
@@ -124,7 +157,7 @@ export class ProjectManager {
     return this.projectPath
   }
 
-  /** 原子写入 project.json */
+  /** 保存 project.json（Windows 兼容） */
   async saveProject(): Promise<void> {
     if (!this.project || !this.projectPath) {
       throw new Error('No project loaded')
@@ -132,12 +165,11 @@ export class ProjectManager {
 
     this.project.updatedAt = new Date().toISOString()
 
-    const tmpPath = join(this.projectPath, '.project.json.tmp')
     const realPath = join(this.projectPath, 'project.json')
     const content = JSON.stringify(this.project, null, 2)
 
-    await fs.writeFile(tmpPath, content, 'utf-8')
-    await fs.rename(tmpPath, realPath) // POSIX 原子 rename
+    // Windows 上 fs.rename 对含中文路径有问题，直接写入目标文件
+    await fs.writeFile(realPath, content, 'utf-8')
   }
 
   /** 更新项目（合并部分数据） */
