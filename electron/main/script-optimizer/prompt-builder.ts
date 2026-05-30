@@ -110,9 +110,10 @@ export class PromptBuilder {
 
     // 5. 镜头语言
     const cameraParts: string[] = []
-    if (shot.camera.shotSize) cameraParts.push(SHOT_SIZE_KEYWORDS[shot.camera.shotSize] || '')
-    if (shot.camera.angle) cameraParts.push(ANGLE_KEYWORDS[shot.camera.angle] || '')
-    if (shot.camera.movement) cameraParts.push(MOVEMENT_KEYWORDS[shot.camera.movement] || '')
+    const cam = shot.camera
+    if (cam?.shotSize) cameraParts.push(SHOT_SIZE_KEYWORDS[cam.shotSize] || '')
+    if (cam?.angle) cameraParts.push(ANGLE_KEYWORDS[cam.angle] || '')
+    if (cam?.movement) cameraParts.push(MOVEMENT_KEYWORDS[cam.movement] || '')
 
     // 6. 灯光
     const lighting = EMOTION_LIGHTING[shot.emotion] || EMOTION_LIGHTING.neutral

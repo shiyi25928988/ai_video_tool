@@ -16,6 +16,60 @@ app = Flask(__name__)
 MOCK_DIR = Path(__file__).parent / '.mock_output'
 MOCK_DIR.mkdir(exist_ok=True)
 
+# 检测运行模式
+def detect_mode():
+    try:
+        import dashscope
+        return 'cloud'
+    except ImportError:
+        return 'mock'
+
+RUN_MODE = detect_mode()
+
+# 从 Electron userData 目录加载 API Key 配置
+def load_api_keys():
+    """从 ai-models.json 和 secure_keys.enc 加载 API Key"""
+    keys = {}
+    try:
+        # 查找 userData 目录
+        if sys.platform == 'win32':
+            appdata = os.environ.get('APPDATA', '')
+            user_data = Path(appdata) / 'video-ai-studio'
+        else:
+            user_data = Path.home() / '.config' / 'video-ai-studio'
+
+        config_file = user_data / 'ai-models.json'
+        if config_file.exists():
+            with open(config_file, encoding='utf-8') as f:
+                data = json.load(f)
+            for model_id, model_data in data.get('models', {}).items():
+                provider = model_data.get('provider', '')
+                if 'dashscope' in provider:
+                    # 从 secure_keys.enc 读取加密的 API Key
+                    enc_file = user_data / 'secure_keys.enc'
+                    if enc_file.exists():
+                        try:
+                            with open(enc_file, encoding='utf-8') as ef:
+                                enc_data = json.load(ef)
+                            key_name = f'ai-model:{model_id}:apiKey'
+                            if key_name in enc_data:
+                                import base64
+                                encoded = enc_data[key_name]
+                                # 尝试用 safeStorage 解密（Electron 环境）
+                                # 这里直接用 base64 解码（fallback）
+                                try:
+                                    keys[model_id] = base64.b64decode(encoded).decode('utf-8')
+                                except:
+                                    keys[model_id] = encoded
+                        except Exception:
+                            pass
+    except Exception as e:
+        print(f'[Sidecar] 加载 API Key 失败: {e}', flush=True)
+    return keys
+
+API_KEYS = load_api_keys()
+print(f'[Sidecar] 已加载 API Key: {list(API_KEYS.keys())}', flush=True)
+
 def random_filename(ext: str = '.png') -> str:
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=12)) + ext
 
@@ -25,14 +79,13 @@ def random_filename(ext: str = '.png') -> str:
 def health():
     return jsonify({
         'status': 'ok',
-        'mode': 'mock',
+        'mode': RUN_MODE,
         'gpu': False,
         'models': {
-            'sdxl': 'mock',
-            'ipadapter': 'mock',
-            'cosyvoice': 'mock',
-            'musetalk': 'mock',
-            'depth_anything': 'mock',
+            'text_to_image': 'wan2.7-image-pro' if RUN_MODE == 'cloud' else 'mock',
+            'text_to_video': 'happyhorse-1.0-t2v' if RUN_MODE == 'cloud' else 'mock',
+            'image_to_video': 'wan2.6-i2v-flash' if RUN_MODE == 'cloud' else 'mock',
+            'tts': 'qwen3-tts-flash' if RUN_MODE == 'cloud' else 'mock',
         },
         'timestamp': time.time()
     })
@@ -58,8 +111,11 @@ def generate_image():
     print(f'[generate_image] prompt={prompt[:120]}...', flush=True)
     print(f'[generate_image] output_path={output_path}', flush=True)
 
+    # 如果请求没带 API Key，使用配置文件中的
+    if not api_key:
+        api_key = API_KEYS.get('textToImage', '')
+
     if api_key:
-        # ── 调用阿里百炼 DashScope API ──
         try:
             import dashscope
             from dashscope.aigc.image_generation import ImageGeneration
@@ -195,6 +251,10 @@ def generate_video():
     print(f'[generate_video] model={model}, resolution={resolution}, ratio={ratio}, duration={duration}s', flush=True)
     print(f'[generate_video] prompt={prompt[:120]}...', flush=True)
 
+    # 如果请求没带 API Key，使用配置文件中的
+    if not api_key:
+        api_key = API_KEYS.get('textToVideo', '')
+
     if not api_key:
         print('[generate_video] no api_key, using mock mode', flush=True)
         output_path.write_bytes(b'')
@@ -290,6 +350,10 @@ def generate_i2v():
     print(f'[generate_i2v] model={model}, resolution={resolution}, ratio={ratio}', flush=True)
     print(f'[generate_i2v] prompt={prompt[:100]}...', flush=True)
     print(f'[generate_i2v] image_url={image_url[:80] if image_url else "(empty)"}...', flush=True)
+
+    # 如果请求没带 API Key，使用配置文件中的
+    if not api_key:
+        api_key = API_KEYS.get('imageToVideo', '')
 
     if not api_key:
         print('[generate_i2v] no api_key, using mock mode', flush=True)
@@ -457,5 +521,7 @@ def extract_face_embedding():
 
 if __name__ == '__main__':
     port = int(os.environ.get('SIDECAR_PORT', 18923))
-    print(json.dumps({'port': port, 'ready': True, 'mode': 'mock'}), flush=True)
+    mode = detect_mode()
+    print(f'[Sidecar] mode={mode}, port={port}', flush=True)
+    print(json.dumps({'port': port, 'ready': True, 'mode': mode}), flush=True)
     app.run(host='127.0.0.1', port=port, debug=False)

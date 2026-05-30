@@ -7868,6 +7868,7 @@ function CharacterCard({ character }) {
 }
 function PipelineProgress() {
   const { currentProject, startPipeline, pipelineProgress, loading, error, refreshProject } = useProjectStore();
+  const [previewShot, setPreviewShot] = reactExports.useState(null);
   if (!currentProject) return null;
   const state = currentProject.pipelineState;
   const total = state.totalShots;
@@ -7889,7 +7890,7 @@ function PipelineProgress() {
     if (currentProject.script) {
       const chapters = currentProject.script.chapters.map((ch) => ({
         ...ch,
-        shots: ch.shots.map((s) => s.status === "failed" ? { ...s, status: "pending" } : s)
+        shots: ch.shots.map((s) => ({ ...s, status: "pending" }))
       }));
       await window.electronAPI.project.update({
         script: { chapters },
@@ -7949,16 +7950,88 @@ function PipelineProgress() {
       currentProject.script.chapters.map((chapter, ci) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-dark-500 mb-1", children: chapter.title }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1 mb-3", children: chapter.shots.map((shot) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "div",
+          "button",
           {
-            className: `w-10 h-10 rounded flex items-center justify-center text-xs font-medium ${shot.status === "done" ? "bg-green-900/50 text-green-400" : shot.status === "rendering" ? "bg-yellow-900/50 text-yellow-400 animate-pulse" : shot.status === "failed" ? "bg-red-900/50 text-red-400" : "bg-dark-700 text-dark-400"}`,
+            onClick: () => setPreviewShot(shot),
+            className: `w-10 h-10 rounded flex items-center justify-center text-xs font-medium transition-colors ${shot.status === "done" ? "bg-green-900/50 text-green-400 hover:bg-green-800/50" : shot.status === "rendering" ? "bg-yellow-900/50 text-yellow-400 animate-pulse" : shot.status === "failed" ? "bg-red-900/50 text-red-400 hover:bg-red-800/50" : "bg-dark-700 text-dark-400 hover:bg-dark-600"}`,
             title: `${shot.id}: ${shot.status}`,
             children: shot.order
           },
           shot.id
         )) })
       ] }, ci))
-    ] })
+    ] }),
+    previewShot && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-black/70 flex items-center justify-center z-50", onClick: () => setPreviewShot(null), children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-auto", onClick: (e) => e.stopPropagation(), children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-lg font-semibold text-white", children: [
+          "分镜 #",
+          previewShot.order,
+          " ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-dark-400 ml-2", children: previewShot.id })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setPreviewShot(null), className: "text-dark-400 hover:text-white text-xl", children: "×" })
+      ] }),
+      previewShot.assets?.video && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-dark-400 mb-1", children: "视频" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "video",
+          {
+            src: `file:///${previewShot.assets.video.replace(/\\/g, "/")}`,
+            controls: true,
+            autoPlay: true,
+            className: "w-full rounded-lg border border-dark-600"
+          }
+        )
+      ] }),
+      previewShot.assets?.image && !previewShot.assets?.video && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-dark-400 mb-1", children: "图片" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "img",
+          {
+            src: `file:///${previewShot.assets.image.replace(/\\/g, "/")}`,
+            alt: previewShot.id,
+            className: "w-full rounded-lg border border-dark-600"
+          }
+        )
+      ] }),
+      !previewShot.assets?.image && !previewShot.assets?.video && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "py-8 text-center text-dark-500 text-sm", children: "暂无渲染素材" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 text-sm", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-dark-400", children: "状态：" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: previewShot.status === "done" ? "text-green-400" : previewShot.status === "failed" ? "text-red-400" : previewShot.status === "rendering" ? "text-yellow-400" : "text-dark-300", children: previewShot.status })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-dark-400", children: "时长：" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-dark-200", children: [
+            previewShot.durationSec,
+            "s"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-dark-400", children: "类型：" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-dark-200", children: previewShot.shotType })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-dark-400", children: "场景：" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-dark-200", children: previewShot.sceneDescription })
+        ] }),
+        previewShot.dialogue?.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-dark-400", children: "台词：" }),
+          previewShot.dialogue.map((d, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "ml-2 text-dark-200", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-primary-400", children: [
+              d.characterId,
+              ":"
+            ] }),
+            " ",
+            d.text
+          ] }, i))
+        ] }),
+        previewShot.error && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-red-400", children: [
+          "错误：",
+          previewShot.error
+        ] })
+      ] })
+    ] }) })
   ] }) });
 }
 const TABS = [
@@ -8595,13 +8668,74 @@ GPU: ${result.gpu ? "是" : "否"}`);
       }
     }));
   };
+  const [aiTestStates, setAiTestStates] = reactExports.useState({});
+  const [aiTestConfirm, setAiTestConfirm] = reactExports.useState(null);
+  const [aiTestImagePath, setAiTestImagePath] = reactExports.useState("");
+  const confirmTestAIModel = (sectionId) => {
+    const entry = aiConfigs[sectionId];
+    if (!entry?.apiKey) {
+      setAiTestStates((prev) => ({ ...prev, [sectionId]: { loading: false, result: { ok: false, msg: "请先填写 API Key" } } }));
+      return;
+    }
+    setAiTestConfirm(sectionId);
+    setAiTestImagePath("");
+  };
+  const pickTestImage = async () => {
+    if (!api()) return;
+    const path = await api().dialog.openFile([{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }]);
+    if (path) setAiTestImagePath(path);
+  };
+  const testAIModel = async (sectionId) => {
+    if (!api()) return;
+    setAiTestConfirm(null);
+    setAiTestStates((prev) => ({ ...prev, [sectionId]: { loading: true, result: null } }));
+    const startTime = Date.now();
+    try {
+      let result;
+      if (sectionId === "textToImage") {
+        result = await api().sidecar.generateImage({ prompt: "一只橘猫坐在窗台上", characterId: `test_${Date.now()}` });
+      } else if (sectionId === "imageToVideo") {
+        const imgPath = aiTestImagePath.replace(/\\/g, "/");
+        result = await api().sidecar.generateI2V({ prompt: "小猫伸懒腰，镜头缓慢拉远", imageUrl: imgPath, duration: 3 });
+      } else if (sectionId === "textToVideo") {
+        result = await api().sidecar.generateVideo({ prompt: "一座微型城市在夜晚焕发生机", duration: 3 });
+      } else if (sectionId === "tts") {
+        result = await api().sidecar.health();
+      }
+      const elapsed = ((Date.now() - startTime) / 1e3).toFixed(1);
+      if (result?.ok) {
+        setAiTestStates((prev) => ({ ...prev, [sectionId]: { loading: false, result: { ok: true, msg: `成功 (${elapsed}s)` } } }));
+      } else {
+        setAiTestStates((prev) => ({ ...prev, [sectionId]: { loading: false, result: { ok: false, msg: result?.error || "测试失败" } } }));
+      }
+    } catch (err) {
+      setAiTestStates((prev) => ({ ...prev, [sectionId]: { loading: false, result: { ok: false, msg: err.message } } }));
+    }
+  };
   const renderAISection = (section) => {
     const entry = aiConfigs[section.id];
     const providers = MODEL_PROVIDERS[section.id] || [];
     const currentPreset = providers.find((p) => p.value === entry.provider);
+    const testState = aiTestStates[section.id];
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-1", children: section.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between mb-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold", children: section.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => confirmTestAIModel(section.id),
+            disabled: testState?.loading || !entry.apiKey,
+            className: "px-3 py-1 text-xs bg-dark-700 hover:bg-primary-600/80 disabled:opacity-50 rounded-lg text-dark-300 hover:text-white transition-colors",
+            children: testState?.loading ? "测试中..." : "测试模型"
+          }
+        )
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-4", children: section.desc }),
+      testState?.result && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `mb-4 text-xs px-3 py-2 rounded-lg ${testState.result.ok ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`, children: [
+        testState.result.ok ? "✓" : "✗",
+        " ",
+        testState.result.msg
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "Provider" }),
@@ -8684,209 +8818,257 @@ GPU: ${result.gpu ? "是" : "否"}`);
       ] })
     ] }, section.id);
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-full overflow-auto p-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-2xl mx-auto space-y-8", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-bold", children: "设置" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "工作空间" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-3", children: "项目文件存储位置。更改后新项目将创建在新路径。" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-dark-300 text-sm truncate", children: workspacePath || "加载中..." }),
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "h-full overflow-auto p-8", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-2xl mx-auto space-y-8", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-2xl font-bold", children: "设置" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "工作空间" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-3", children: "项目文件存储位置。更改后新项目将创建在新路径。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-dark-300 text-sm truncate", children: workspacePath || "加载中..." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: changeWorkspace,
+              className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors flex-shrink-0",
+              children: "更改路径"
+            }
+          )
+        ] }),
+        !workspaceIsDefault && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-yellow-400/70 text-xs mt-2", children: "⚠ 已使用自定义路径，重启应用后生效" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "Python Sidecar" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-dark-400 text-sm", children: [
+            "状态: ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-white", children: sidecarStatus })
+          ] }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: testPing, className: "px-3 py-2 bg-dark-600 hover:bg-dark-500 rounded-lg text-white text-sm transition-colors", children: "检测状态" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: startSidecar, className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors", children: "启动 Sidecar" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: stopSidecar, className: "px-4 py-2 bg-red-900/50 hover:bg-red-900/80 rounded-lg text-red-300 text-sm transition-colors", children: "关闭 Sidecar" })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-1", children: "LLM API 配置" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-4", children: "支持多条 OpenAI 兼容端点，勾选激活要使用的一条。" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 mb-4", children: [
+          llmConfigs.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-500 text-sm py-2", children: "暂无配置，请点击下方添加。" }),
+          llmConfigs.map((c) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "div",
+            {
+              className: `flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${c.isActive ? "bg-primary-900/20 border-primary-600" : "bg-dark-900 border-dark-700 hover:border-dark-500"}`,
+              onClick: () => setActiveLlm(c.id),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${c.isActive ? "border-primary-500" : "border-dark-500"}`, children: c.isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2 h-2 rounded-full bg-primary-500" }) }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-white", children: c.name }),
+                    c.isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs px-1.5 py-0.5 rounded bg-primary-600/30 text-primary-400", children: "使用中" })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-xs text-dark-400 truncate mt-0.5", children: [
+                    c.baseUrl || "(默认)",
+                    " ",
+                    c.model && `· ${c.model}`
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1 flex-shrink-0", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        startEditLlm(c.id);
+                      },
+                      className: "px-2 py-1 text-xs bg-dark-700 hover:bg-dark-600 rounded text-dark-300 transition-colors",
+                      children: "编辑"
+                    }
+                  ),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "button",
+                    {
+                      onClick: (e) => {
+                        e.stopPropagation();
+                        deleteLlmConfig(c.id);
+                      },
+                      className: "px-2 py-1 text-xs bg-dark-700 hover:bg-red-900/50 rounded text-dark-300 hover:text-red-400 transition-colors",
+                      children: "删除"
+                    }
+                  )
+                ] })
+              ]
+            },
+            c.id
+          ))
+        ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "button",
           {
-            onClick: changeWorkspace,
-            className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors flex-shrink-0",
-            children: "更改路径"
+            onClick: () => startEditLlm(),
+            className: "w-full px-4 py-2 border-2 border-dashed border-dark-600 hover:border-primary-600 rounded-lg text-dark-400 hover:text-primary-400 text-sm transition-colors",
+            children: "+ 添加 LLM 配置"
           }
-        )
-      ] }),
-      !workspaceIsDefault && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-yellow-400/70 text-xs mt-2", children: "⚠ 已使用自定义路径，重启应用后生效" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "Python Sidecar" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-dark-400 text-sm", children: [
-          "状态: ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-white", children: sidecarStatus })
-        ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: testPing, className: "px-3 py-2 bg-dark-600 hover:bg-dark-500 rounded-lg text-white text-sm transition-colors", children: "检测状态" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: startSidecar, className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors", children: "启动 Sidecar" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: stopSidecar, className: "px-4 py-2 bg-red-900/50 hover:bg-red-900/80 rounded-lg text-red-300 text-sm transition-colors", children: "关闭 Sidecar" })
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-1", children: "LLM API 配置" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-4", children: "支持多条 OpenAI 兼容端点，勾选激活要使用的一条。" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 mb-4", children: [
-        llmConfigs.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-500 text-sm py-2", children: "暂无配置，请点击下方添加。" }),
-        llmConfigs.map((c) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "div",
-          {
-            className: `flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${c.isActive ? "bg-primary-900/20 border-primary-600" : "bg-dark-900 border-dark-700 hover:border-dark-500"}`,
-            onClick: () => setActiveLlm(c.id),
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${c.isActive ? "border-primary-500" : "border-dark-500"}`, children: c.isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-2 h-2 rounded-full bg-primary-500" }) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 min-w-0", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-white", children: c.name }),
-                  c.isActive && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs px-1.5 py-0.5 rounded bg-primary-600/30 text-primary-400", children: "使用中" })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-xs text-dark-400 truncate mt-0.5", children: [
-                  c.baseUrl || "(默认)",
-                  " ",
-                  c.model && `· ${c.model}`
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-1 flex-shrink-0", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    onClick: (e) => {
-                      e.stopPropagation();
-                      startEditLlm(c.id);
-                    },
-                    className: "px-2 py-1 text-xs bg-dark-700 hover:bg-dark-600 rounded text-dark-300 transition-colors",
-                    children: "编辑"
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    onClick: (e) => {
-                      e.stopPropagation();
-                      deleteLlmConfig(c.id);
-                    },
-                    className: "px-2 py-1 text-xs bg-dark-700 hover:bg-red-900/50 rounded text-dark-300 hover:text-red-400 transition-colors",
-                    children: "删除"
-                  }
-                )
-              ] })
-            ]
-          },
-          c.id
-        ))
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          onClick: () => startEditLlm(),
-          className: "w-full px-4 py-2 border-2 border-dashed border-dark-600 hover:border-primary-600 rounded-lg text-dark-400 hover:text-primary-400 text-sm transition-colors",
-          children: "+ 添加 LLM 配置"
-        }
-      ),
-      llmEditing && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 p-4 bg-dark-900 rounded-lg border border-dark-600 space-y-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "名称" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              value: llmEditing.name,
-              onChange: (e) => setLlmEditing({ ...llmEditing, name: e.target.value }),
-              placeholder: "如 OpenAI、DeepSeek、Ollama",
-              className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "Base URL" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              value: llmEditing.baseUrl,
-              onChange: (e) => setLlmEditing({ ...llmEditing, baseUrl: e.target.value }),
-              placeholder: "https://api.openai.com/v1",
-              className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "API Key" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ApiKeyInput, { value: llmEditing.apiKey, onChange: (v) => setLlmEditing({ ...llmEditing, apiKey: v }) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "text-sm text-dark-400", children: "Model" }),
+        ),
+        llmEditing && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 p-4 bg-dark-900 rounded-lg border border-dark-600 space-y-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "名称" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "button",
+              "input",
               {
-                onClick: fetchLlmModels,
-                disabled: llmModelsLoading,
-                className: "text-xs text-primary-400 hover:text-primary-300 disabled:opacity-50 transition-colors",
-                children: llmModelsLoading ? "检测中..." : "检测模型"
+                value: llmEditing.name,
+                onChange: (e) => setLlmEditing({ ...llmEditing, name: e.target.value }),
+                placeholder: "如 OpenAI、DeepSeek、Ollama",
+                className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
               }
             )
           ] }),
-          llmModels.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "select",
-            {
-              value: llmEditing.model,
-              onChange: (e) => setLlmEditing({ ...llmEditing, model: e.target.value }),
-              className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white focus:outline-none focus:border-primary-500",
-              children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "-- 请选择模型 --" }),
-                llmModels.map((m) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: m, children: m }, m))
-              ]
-            }
-          ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              value: llmEditing.model,
-              onChange: (e) => setLlmEditing({ ...llmEditing, model: e.target.value }),
-              placeholder: "gpt-4o、deepseek-chat 等（可点击上方检测）",
-              className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
-            }
-          )
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "Base URL" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                value: llmEditing.baseUrl,
+                onChange: (e) => setLlmEditing({ ...llmEditing, baseUrl: e.target.value }),
+                placeholder: "https://api.openai.com/v1",
+                className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "API Key" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(ApiKeyInput, { value: llmEditing.apiKey, onChange: (v) => setLlmEditing({ ...llmEditing, apiKey: v }) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "text-sm text-dark-400", children: "Model" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: fetchLlmModels,
+                  disabled: llmModelsLoading,
+                  className: "text-xs text-primary-400 hover:text-primary-300 disabled:opacity-50 transition-colors",
+                  children: llmModelsLoading ? "检测中..." : "检测模型"
+                }
+              )
+            ] }),
+            llmModels.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                value: llmEditing.model,
+                onChange: (e) => setLlmEditing({ ...llmEditing, model: e.target.value }),
+                className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white focus:outline-none focus:border-primary-500",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "-- 请选择模型 --" }),
+                  llmModels.map((m) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: m, children: m }, m))
+                ]
+              }
+            ) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                value: llmEditing.model,
+                onChange: (e) => setLlmEditing({ ...llmEditing, model: e.target.value }),
+                placeholder: "gpt-4o、deepseek-chat 等（可点击上方检测）",
+                className: "w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-white placeholder-dark-500 focus:outline-none focus:border-primary-500"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: saveLlmConfig,
+                className: "px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-white font-medium transition-colors text-sm",
+                children: "保存"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: testLlmConfig,
+                disabled: llmTesting,
+                className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 disabled:opacity-50 rounded-lg text-white font-medium transition-colors text-sm",
+                children: llmTesting ? "测试中..." : "测试连接"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: () => {
+                  setLlmEditing(null);
+                  setLlmTestResult(null);
+                  setLlmModels([]);
+                },
+                className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-300 transition-colors text-sm",
+                children: "取消"
+              }
+            )
+          ] }),
+          llmTestResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `text-sm px-3 py-2 rounded-lg ${llmTestResult.ok ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`, children: llmTestResult.msg })
+        ] })
+      ] }),
+      AI_SECTIONS.map((section) => renderAISection(section)),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "FFmpeg" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-dark-400 text-sm", children: [
+          "状态: ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-white", children: ffmpegStatus })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              onClick: saveLlmConfig,
-              className: "px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-white font-medium transition-colors text-sm",
-              children: "保存"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              onClick: testLlmConfig,
-              disabled: llmTesting,
-              className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 disabled:opacity-50 rounded-lg text-white font-medium transition-colors text-sm",
-              children: llmTesting ? "测试中..." : "测试连接"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              onClick: () => {
-                setLlmEditing(null);
-                setLlmTestResult(null);
-                setLlmModels([]);
-              },
-              className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-300 transition-colors text-sm",
-              children: "取消"
-            }
-          )
-        ] }),
-        llmTestResult && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `text-sm px-3 py-2 rounded-lg ${llmTestResult.ok ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`, children: llmTestResult.msg })
+        ffmpegStatus === "未安装" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-yellow-400 text-sm mt-2", children: "请安装 FFmpeg 并加入系统 PATH，或在下方指定路径。" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "视频生成 Provider" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderList, {})
       ] })
     ] }),
-    AI_SECTIONS.map((section) => renderAISection(section)),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "FFmpeg" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-dark-400 text-sm", children: [
-        "状态: ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-white", children: ffmpegStatus })
+    aiTestConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-black/60 flex items-center justify-center z-50", onClick: () => setAiTestConfirm(null), children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-sm w-full mx-4", onClick: (e) => e.stopPropagation(), children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold text-white mb-2", children: "确认测试" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-300 text-sm mb-3", children: "测试会调用模型接口，将消耗一定的 API 额度。是否继续？" }),
+      aiTestConfirm === "imageToVideo" && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "选择首帧图片" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              value: aiTestImagePath,
+              readOnly: true,
+              placeholder: "点击右侧按钮选择图片",
+              className: "flex-1 px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              onClick: pickTestImage,
+              className: "px-3 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors",
+              children: "选择"
+            }
+          )
+        ] }),
+        aiTestImagePath && /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: `file:///${aiTestImagePath.replace(/\\/g, "/")}`, alt: "预览", className: "w-20 h-20 mt-2 object-cover rounded border border-dark-600" })
       ] }),
-      ffmpegStatus === "未安装" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-yellow-400 text-sm mt-2", children: "请安装 FFmpeg 并加入系统 PATH，或在下方指定路径。" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "视频生成 Provider" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderList, {})
-    ] })
-  ] }) });
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => testAIModel(aiTestConfirm),
+            disabled: aiTestConfirm === "imageToVideo" && !aiTestImagePath,
+            className: "flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg text-white font-medium transition-colors",
+            children: "确认测试"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => setAiTestConfirm(null),
+            className: "px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-300 transition-colors",
+            children: "取消"
+          }
+        )
+      ] })
+    ] }) })
+  ] });
 }
 function ProviderList() {
   const [providers, setProviders] = reactExports.useState([]);

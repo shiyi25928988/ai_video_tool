@@ -2,6 +2,7 @@ import { EventEmitter } from 'events'
 import { ProjectManager } from './project-manager'
 import { ScriptOptimizer } from './script-optimizer/optimizer'
 import { PythonSpawner } from './python-spawner'
+import { AIModelConfigManager } from './ai-model-config'
 import { Semaphore } from './utils/semaphore'
 import { logger } from './utils/logger'
 import type { Project, ShotScript, Chapter, LLMConfig, PipelinePhase, PipelineState } from './script-optimizer/types'
@@ -26,7 +27,8 @@ export class PipelineRunner extends EventEmitter {
     private projectManager: ProjectManager,
     private sidecar: PythonSpawner,
     private llmConfig: LLMConfig,
-    concurrency: number = 2
+    concurrency: number = 2,
+    private aiModelConfig?: AIModelConfigManager
   ) {
     super()
     this.concurrency = concurrency
@@ -149,9 +151,13 @@ export class PipelineRunner extends EventEmitter {
 
       if (this.sidecar.isReady) {
         try {
+          const imgConfig = this.aiModelConfig ? await this.aiModelConfig.get('textToImage') : null
           const result = await this.sidecar.call('/generate_image', {
             prompt: `portrait of ${char.name}, ${char.appearanceDetail.hair}, ${char.appearanceDetail.eyes}, ${char.appearanceDetail.clothing}`,
-            output_dir: charDir
+            api_key: imgConfig?.apiKey || '',
+            model: imgConfig?.modelName || 'wan2.7-image-pro',
+            output_dir: charDir,
+            filename: char.id,
           })
           char.referenceImage = result.path as string
           logger.info(`Character ${char.name} reference image generated`)
@@ -229,12 +235,16 @@ export class PipelineRunner extends EventEmitter {
 
     // 生成图片
     if (shot.imagePrompt) {
+      const imgCfg = this.aiModelConfig ? await this.aiModelConfig.get('textToImage') : null
       logger.info(`[${shot.id}] 调用 /generate_image prompt=${shot.imagePrompt.positive.slice(0, 80)}...`)
       const imgResult = await this.sidecar.call('/generate_image', {
         prompt: shot.imagePrompt.positive,
         negative_prompt: shot.imagePrompt.negative,
+        api_key: imgCfg?.apiKey || '',
+        model: imgCfg?.modelName || 'wan2.7-image-pro',
         embedding_id: shot.charactersInScene[0]?.characterId,
-        output_dir: shotDir
+        output_dir: shotDir,
+        filename: shot.id,
       })
       shot.assets.image = imgResult.path as string
       logger.info(`[${shot.id}] 图片生成完成: ${shot.assets.image}`)
@@ -244,10 +254,13 @@ export class PipelineRunner extends EventEmitter {
     switch (shot.shotType) {
       case 'dialogue': {
         if (shot.dialogue.length > 0) {
+          const ttsCfg = this.aiModelConfig ? await this.aiModelConfig.get('tts') : null
           const text = shot.dialogue.map(d => d.text).join(' ')
           logger.info(`[${shot.id}] 调用 /generate_tts text=${text.slice(0, 50)}...`)
           const ttsResult = await this.sidecar.call('/generate_tts', {
             text,
+            api_key: ttsCfg?.apiKey || '',
+            model: ttsCfg?.modelName || 'qwen3-tts-flash',
             character_id: shot.dialogue[0].characterId,
             tone: shot.dialogue[0].tone,
             output_dir: shotDir
@@ -286,9 +299,12 @@ export class PipelineRunner extends EventEmitter {
       }
 
       case 'action': {
+        const vidCfg = this.aiModelConfig ? await this.aiModelConfig.get('textToVideo') : null
         logger.info(`[${shot.id}] 调用 /generate_video prompt=${shot.sceneDescription.slice(0, 80)}...`)
         const videoResult = await this.sidecar.call('/generate_video', {
           prompt: shot.sceneDescription,
+          api_key: vidCfg?.apiKey || '',
+          model: vidCfg?.modelName || 'happyhorse-1.0-t2v',
           duration: Math.min(shot.durationSec, 15),
           output_dir: shotDir,
           filename: shot.id,

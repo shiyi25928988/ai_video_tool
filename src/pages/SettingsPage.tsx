@@ -457,14 +457,74 @@ export default function SettingsPage() {
     }))
   }
 
+  const [aiTestStates, setAiTestStates] = useState<Record<string, { loading: boolean; result: { ok: boolean; msg: string } | null }>>({})
+  const [aiTestConfirm, setAiTestConfirm] = useState<string | null>(null)
+  const [aiTestImagePath, setAiTestImagePath] = useState('')
+
+  const confirmTestAIModel = (sectionId: string) => {
+    const entry = aiConfigs[sectionId]
+    if (!entry?.apiKey) {
+      setAiTestStates(prev => ({ ...prev, [sectionId]: { loading: false, result: { ok: false, msg: '请先填写 API Key' } } }))
+      return
+    }
+    setAiTestConfirm(sectionId)
+    setAiTestImagePath('')
+  }
+
+  const pickTestImage = async () => {
+    if (!api()) return
+    const path = await api()!.dialog.openFile([{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }])
+    if (path) setAiTestImagePath(path)
+  }
+
+  const testAIModel = async (sectionId: string) => {
+    if (!api()) return
+    setAiTestConfirm(null)
+    setAiTestStates(prev => ({ ...prev, [sectionId]: { loading: true, result: null } }))
+    const startTime = Date.now()
+    try {
+      let result: any
+      if (sectionId === 'textToImage') {
+        result = await api()!.sidecar.generateImage({ prompt: '一只橘猫坐在窗台上', characterId: `test_${Date.now()}` })
+      } else if (sectionId === 'imageToVideo') {
+        const imgPath = aiTestImagePath.replace(/\\/g, '/')
+        result = await api()!.sidecar.generateI2V({ prompt: '小猫伸懒腰，镜头缓慢拉远', imageUrl: imgPath, duration: 3 })
+      } else if (sectionId === 'textToVideo') {
+        result = await api()!.sidecar.generateVideo({ prompt: '一座微型城市在夜晚焕发生机', duration: 3 })
+      } else if (sectionId === 'tts') {
+        result = await api()!.sidecar.health()
+      }
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+      if (result?.ok) {
+        setAiTestStates(prev => ({ ...prev, [sectionId]: { loading: false, result: { ok: true, msg: `成功 (${elapsed}s)` } } }))
+      } else {
+        setAiTestStates(prev => ({ ...prev, [sectionId]: { loading: false, result: { ok: false, msg: result?.error || '测试失败' } } }))
+      }
+    } catch (err) {
+      setAiTestStates(prev => ({ ...prev, [sectionId]: { loading: false, result: { ok: false, msg: (err as Error).message } } }))
+    }
+  }
+
   const renderAISection = (section: typeof AI_SECTIONS[number]) => {
     const entry = aiConfigs[section.id]
     const providers = MODEL_PROVIDERS[section.id] || []
     const currentPreset = providers.find(p => p.value === entry.provider)
+    const testState = aiTestStates[section.id]
     return (
       <section key={section.id} className="bg-dark-800 border border-dark-700 rounded-xl p-6">
-        <h2 className="text-lg font-semibold mb-1">{section.title}</h2>
+        <div className="flex items-start justify-between mb-1">
+          <h2 className="text-lg font-semibold">{section.title}</h2>
+          <button onClick={() => confirmTestAIModel(section.id)} disabled={testState?.loading || !entry.apiKey}
+            className="px-3 py-1 text-xs bg-dark-700 hover:bg-primary-600/80 disabled:opacity-50 rounded-lg text-dark-300 hover:text-white transition-colors">
+            {testState?.loading ? '测试中...' : '测试模型'}
+          </button>
+        </div>
         <p className="text-dark-400 text-sm mb-4">{section.desc}</p>
+        {testState?.result && (
+          <div className={`mb-4 text-xs px-3 py-2 rounded-lg ${testState.result.ok ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+            {testState.result.ok ? '✓' : '✗'} {testState.result.msg}
+          </div>
+        )}
         <div className="space-y-4">
           <div>
             <label className="block text-sm text-dark-400 mb-1">Provider</label>
@@ -694,6 +754,50 @@ export default function SettingsPage() {
           <ProviderList />
         </section>
       </div>
+
+      {/* 测试确认对话框 */}
+      {aiTestConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setAiTestConfirm(null)}>
+          <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-white mb-2">确认测试</h3>
+            <p className="text-dark-300 text-sm mb-3">测试会调用模型接口，将消耗一定的 API 额度。是否继续？</p>
+
+            {/* 图生视频需要选择图片 */}
+            {aiTestConfirm === 'imageToVideo' && (
+              <div className="mb-4">
+                <label className="block text-sm text-dark-400 mb-1">选择首帧图片</label>
+                <div className="flex gap-2">
+                  <input
+                    value={aiTestImagePath}
+                    readOnly
+                    placeholder="点击右侧按钮选择图片"
+                    className="flex-1 px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-sm placeholder-dark-500 focus:outline-none"
+                  />
+                  <button onClick={pickTestImage}
+                    className="px-3 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-white text-sm transition-colors">
+                    选择
+                  </button>
+                </div>
+                {aiTestImagePath && (
+                  <img src={`file:///${aiTestImagePath.replace(/\\/g, '/')}`} alt="预览" className="w-20 h-20 mt-2 object-cover rounded border border-dark-600" />
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button onClick={() => testAIModel(aiTestConfirm)}
+                disabled={aiTestConfirm === 'imageToVideo' && !aiTestImagePath}
+                className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-lg text-white font-medium transition-colors">
+                确认测试
+              </button>
+              <button onClick={() => setAiTestConfirm(null)}
+                className="px-4 py-2 bg-dark-700 hover:bg-dark-600 rounded-lg text-dark-300 transition-colors">
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -627,9 +627,10 @@ class PromptBuilder {
       }
     }
     const cameraParts = [];
-    if (shot.camera.shotSize) cameraParts.push(SHOT_SIZE_KEYWORDS[shot.camera.shotSize] || "");
-    if (shot.camera.angle) cameraParts.push(ANGLE_KEYWORDS[shot.camera.angle] || "");
-    if (shot.camera.movement) cameraParts.push(MOVEMENT_KEYWORDS[shot.camera.movement] || "");
+    const cam = shot.camera;
+    if (cam?.shotSize) cameraParts.push(SHOT_SIZE_KEYWORDS[cam.shotSize] || "");
+    if (cam?.angle) cameraParts.push(ANGLE_KEYWORDS[cam.angle] || "");
+    if (cam?.movement) cameraParts.push(MOVEMENT_KEYWORDS[cam.movement] || "");
     const lighting = EMOTION_LIGHTING[shot.emotion] || EMOTION_LIGHTING.neutral;
     const atmosphere = `${shot.emotion} atmosphere, cinematic mood`;
     const positive = [
@@ -937,11 +938,12 @@ class Logger {
 }
 const logger = new Logger();
 class PipelineRunner extends EventEmitter {
-  constructor(projectManager2, sidecar, llmConfig, concurrency = 2) {
+  constructor(projectManager2, sidecar, llmConfig, concurrency = 2, aiModelConfig2) {
     super();
     this.projectManager = projectManager2;
     this.sidecar = sidecar;
     this.llmConfig = llmConfig;
+    this.aiModelConfig = aiModelConfig2;
     this.concurrency = concurrency;
   }
   paused = false;
@@ -1032,9 +1034,13 @@ class PipelineRunner extends EventEmitter {
       const charDir = await this.projectManager.ensureCharacterDir(char.id);
       if (this.sidecar.isReady) {
         try {
+          const imgConfig = this.aiModelConfig ? await this.aiModelConfig.get("textToImage") : null;
           const result = await this.sidecar.call("/generate_image", {
             prompt: `portrait of ${char.name}, ${char.appearanceDetail.hair}, ${char.appearanceDetail.eyes}, ${char.appearanceDetail.clothing}`,
-            output_dir: charDir
+            api_key: imgConfig?.apiKey || "",
+            model: imgConfig?.modelName || "wan2.7-image-pro",
+            output_dir: charDir,
+            filename: char.id
           });
           char.referenceImage = result.path;
           logger.info(`Character ${char.name} reference image generated`);
@@ -1094,12 +1100,16 @@ class PipelineRunner extends EventEmitter {
     }
     logger.info(`[${shot.id}] 开始渲染 shotType=${shot.shotType}, duration=${shot.durationSec}s`);
     if (shot.imagePrompt) {
+      const imgCfg = this.aiModelConfig ? await this.aiModelConfig.get("textToImage") : null;
       logger.info(`[${shot.id}] 调用 /generate_image prompt=${shot.imagePrompt.positive.slice(0, 80)}...`);
       const imgResult = await this.sidecar.call("/generate_image", {
         prompt: shot.imagePrompt.positive,
         negative_prompt: shot.imagePrompt.negative,
+        api_key: imgCfg?.apiKey || "",
+        model: imgCfg?.modelName || "wan2.7-image-pro",
         embedding_id: shot.charactersInScene[0]?.characterId,
-        output_dir: shotDir
+        output_dir: shotDir,
+        filename: shot.id
       });
       shot.assets.image = imgResult.path;
       logger.info(`[${shot.id}] 图片生成完成: ${shot.assets.image}`);
@@ -1107,10 +1117,13 @@ class PipelineRunner extends EventEmitter {
     switch (shot.shotType) {
       case "dialogue": {
         if (shot.dialogue.length > 0) {
+          const ttsCfg = this.aiModelConfig ? await this.aiModelConfig.get("tts") : null;
           const text = shot.dialogue.map((d) => d.text).join(" ");
           logger.info(`[${shot.id}] 调用 /generate_tts text=${text.slice(0, 50)}...`);
           const ttsResult = await this.sidecar.call("/generate_tts", {
             text,
+            api_key: ttsCfg?.apiKey || "",
+            model: ttsCfg?.modelName || "qwen3-tts-flash",
             character_id: shot.dialogue[0].characterId,
             tone: shot.dialogue[0].tone,
             output_dir: shotDir
@@ -1146,9 +1159,12 @@ class PipelineRunner extends EventEmitter {
         break;
       }
       case "action": {
+        const vidCfg = this.aiModelConfig ? await this.aiModelConfig.get("textToVideo") : null;
         logger.info(`[${shot.id}] 调用 /generate_video prompt=${shot.sceneDescription.slice(0, 80)}...`);
         const videoResult = await this.sidecar.call("/generate_video", {
           prompt: shot.sceneDescription,
+          api_key: vidCfg?.apiKey || "",
+          model: vidCfg?.modelName || "happyhorse-1.0-t2v",
           duration: Math.min(shot.durationSec, 15),
           output_dir: shotDir,
           filename: shot.id
@@ -1912,7 +1928,7 @@ function registerIPC() {
   ipcMain.handle("pipeline:start", async (_e, config) => {
     const llmConfig = await llmConfigManager.getActive();
     if (!llmConfig) throw new Error("LLM not configured");
-    const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, config?.concurrency || 2);
+    const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, config?.concurrency || 2, aiModelConfig);
     runner.on("phase:change", (phase) => mainWindow?.webContents.send("pipeline:phase", phase));
     runner.on("shot:start", (id) => mainWindow?.webContents.send("pipeline:shot-start", id));
     runner.on("shot:done", (id) => mainWindow?.webContents.send("pipeline:shot-done", id));

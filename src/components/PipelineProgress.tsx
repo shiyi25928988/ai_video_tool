@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { useProjectStore } from '../stores/project-store'
+import type { ShotScript } from '../../electron/main/script-optimizer/types'
 
 export default function PipelineProgress() {
   const { currentProject, startPipeline, pipelineProgress, loading, error, refreshProject } = useProjectStore()
+  const [previewShot, setPreviewShot] = useState<ShotScript | null>(null)
 
   if (!currentProject) return null
 
@@ -25,11 +28,11 @@ export default function PipelineProgress() {
 
   const resetAndStart = async () => {
     if (!window.electronAPI) return
-    // 重置失败的 shot 状态为 pending
+    // 重置所有非 pending 的 shot 状态为 pending
     if (currentProject.script) {
       const chapters = currentProject.script.chapters.map(ch => ({
         ...ch,
-        shots: ch.shots.map(s => s.status === 'failed' ? { ...s, status: 'pending' as const } : s)
+        shots: ch.shots.map(s => ({ ...s, status: 'pending' as const }))
       }))
       await window.electronAPI.project.update({
         script: { chapters },
@@ -104,22 +107,103 @@ export default function PipelineProgress() {
                 <p className="text-xs text-dark-500 mb-1">{chapter.title}</p>
                 <div className="flex flex-wrap gap-1 mb-3">
                   {chapter.shots.map(shot => (
-                    <div
+                    <button
                       key={shot.id}
-                      className={`w-10 h-10 rounded flex items-center justify-center text-xs font-medium ${
-                        shot.status === 'done' ? 'bg-green-900/50 text-green-400' :
+                      onClick={() => setPreviewShot(shot)}
+                      className={`w-10 h-10 rounded flex items-center justify-center text-xs font-medium transition-colors ${
+                        shot.status === 'done' ? 'bg-green-900/50 text-green-400 hover:bg-green-800/50' :
                         shot.status === 'rendering' ? 'bg-yellow-900/50 text-yellow-400 animate-pulse' :
-                        shot.status === 'failed' ? 'bg-red-900/50 text-red-400' :
-                        'bg-dark-700 text-dark-400'
+                        shot.status === 'failed' ? 'bg-red-900/50 text-red-400 hover:bg-red-800/50' :
+                        'bg-dark-700 text-dark-400 hover:bg-dark-600'
                       }`}
                       title={`${shot.id}: ${shot.status}`}
                     >
                       {shot.order}
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* 分镜预览弹窗 */}
+        {previewShot && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50" onClick={() => setPreviewShot(null)}>
+            <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">
+                  分镜 #{previewShot.order} <span className="text-sm text-dark-400 ml-2">{previewShot.id}</span>
+                </h3>
+                <button onClick={() => setPreviewShot(null)} className="text-dark-400 hover:text-white text-xl">×</button>
+              </div>
+
+              {/* 视频预览 */}
+              {previewShot.assets?.video && (
+                <div className="mb-4">
+                  <p className="text-xs text-dark-400 mb-1">视频</p>
+                  <video
+                    src={`file:///${previewShot.assets.video.replace(/\\/g, '/')}`}
+                    controls autoPlay
+                    className="w-full rounded-lg border border-dark-600"
+                  />
+                </div>
+              )}
+
+              {/* 图片预览 */}
+              {previewShot.assets?.image && !previewShot.assets?.video && (
+                <div className="mb-4">
+                  <p className="text-xs text-dark-400 mb-1">图片</p>
+                  <img
+                    src={`file:///${previewShot.assets.image.replace(/\\/g, '/')}`}
+                    alt={previewShot.id}
+                    className="w-full rounded-lg border border-dark-600"
+                  />
+                </div>
+              )}
+
+              {/* 无素材 */}
+              {!previewShot.assets?.image && !previewShot.assets?.video && (
+                <div className="py-8 text-center text-dark-500 text-sm">暂无渲染素材</div>
+              )}
+
+              {/* 分镜信息 */}
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="text-dark-400">状态：</span>
+                  <span className={
+                    previewShot.status === 'done' ? 'text-green-400' :
+                    previewShot.status === 'failed' ? 'text-red-400' :
+                    previewShot.status === 'rendering' ? 'text-yellow-400' : 'text-dark-300'
+                  }>{previewShot.status}</span>
+                </div>
+                <div>
+                  <span className="text-dark-400">时长：</span>
+                  <span className="text-dark-200">{previewShot.durationSec}s</span>
+                </div>
+                <div>
+                  <span className="text-dark-400">类型：</span>
+                  <span className="text-dark-200">{previewShot.shotType}</span>
+                </div>
+                <div>
+                  <span className="text-dark-400">场景：</span>
+                  <span className="text-dark-200">{previewShot.sceneDescription}</span>
+                </div>
+                {previewShot.dialogue?.length > 0 && (
+                  <div>
+                    <span className="text-dark-400">台词：</span>
+                    {previewShot.dialogue.map((d, i) => (
+                      <div key={i} className="ml-2 text-dark-200">
+                        <span className="text-primary-400">{d.characterId}:</span> {d.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {previewShot.error && (
+                  <div className="text-red-400">错误：{previewShot.error}</div>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

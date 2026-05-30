@@ -239,7 +239,7 @@ function registerIPC(): void {
   ipcMain.handle('pipeline:start', async (_e, config?: { concurrency?: number }) => {
     const llmConfig = await llmConfigManager.getActive()
     if (!llmConfig) throw new Error('LLM not configured')
-    const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, config?.concurrency || 2)
+    const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, config?.concurrency || 2, aiModelConfig)
 
     runner.on('phase:change', (phase) => mainWindow?.webContents.send('pipeline:phase', phase))
     runner.on('shot:start', (id) => mainWindow?.webContents.send('pipeline:shot-start', id))
