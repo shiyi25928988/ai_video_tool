@@ -95,12 +95,16 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  createProject: async (title, durationSec, style) => {
+  createProject: async (title, durationSec, style, refImagePaths?: string[]) => {
     const api = getAPI()
     if (!api) { set({ error: 'Electron API 不可用' }); return }
     set({ loading: true, error: null })
     try {
       const project = await api.project.create(title, durationSec, style)
+      // 复制参考图到项目目录
+      if (refImagePaths && refImagePaths.length > 0) {
+        await api.project.update({ referenceImages: refImagePaths })
+      }
       set({ currentProject: project, loading: false })
       get().loadProjects()
     } catch (err) {

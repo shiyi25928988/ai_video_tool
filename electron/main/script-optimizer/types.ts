@@ -204,6 +204,9 @@ export interface Project {
   createdAt: string
   updatedAt: string
 
+  // 参考素材（商品外观、场景参考等）
+  referenceImages?: string[]
+
   // Layer 1 输出
   outline?: StoryOutline
 

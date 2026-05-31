@@ -7259,7 +7259,7 @@ const useProjectStore = create((set, get) => ({
       set({ error: err.message });
     }
   },
-  createProject: async (title, durationSec, style) => {
+  createProject: async (title, durationSec, style, refImagePaths) => {
     const api2 = getAPI();
     if (!api2) {
       set({ error: "Electron API 不可用" });
@@ -7268,6 +7268,9 @@ const useProjectStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const project = await api2.project.create(title, durationSec, style);
+      if (refImagePaths && refImagePaths.length > 0) {
+        await api2.project.update({ referenceImages: refImagePaths });
+      }
       set({ currentProject: project, loading: false });
       get().loadProjects();
     } catch (err) {
@@ -7367,14 +7370,30 @@ function HomePage() {
   const [duration, setDuration] = reactExports.useState(300);
   const [deleteTarget, setDeleteTarget] = reactExports.useState(null);
   const [selectedId, setSelectedId] = reactExports.useState(null);
+  const [refImages, setRefImages] = reactExports.useState([]);
+  reactExports.useRef(null);
   reactExports.useEffect(() => {
     loadProjects();
   }, []);
+  const handleAddImages = async () => {
+    if (!window.electronAPI) return;
+    const files = await window.electronAPI.dialog.openFile([
+      { name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }
+    ]);
+    if (files) {
+      const paths = Array.isArray(files) ? files : [files];
+      setRefImages((prev) => [...prev, ...paths.map((p) => ({ name: p.split(/[/\\]/).pop() || "image", path: p }))].slice(0, 9));
+    }
+  };
+  const removeImage = (idx) => {
+    setRefImages((prev) => prev.filter((_, i) => i !== idx));
+  };
   const handleCreate = async () => {
     if (!title.trim()) return;
-    await createProject(title.trim(), duration, style);
+    await createProject(title.trim(), duration, style, refImages.map((i) => i.path));
     setShowNew(false);
     setTitle("");
+    setRefImages([]);
   };
   const handleOpen = async () => {
     if (!window.electronAPI) return;
@@ -7469,6 +7488,31 @@ function HomePage() {
                 min: 5,
                 max: 600,
                 className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white focus:outline-none focus:border-primary-500"
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm text-dark-400 mb-1", children: "参考素材（商品外观、场景参考等，最多9张）" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2 mb-2", children: [
+            refImages.map((img, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-16 h-16 rounded border border-dark-600 overflow-hidden group", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: `file:///${img.path.replace(/\\/g, "/")}`, alt: img.name, className: "w-full h-full object-cover" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  onClick: () => removeImage(idx),
+                  className: "absolute top-0 right-0 w-4 h-4 bg-red-600 text-white text-xs flex items-center justify-center rounded-bl opacity-0 group-hover:opacity-100 transition-opacity",
+                  children: "×"
+                }
+              ),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white truncate px-0.5", children: img.name })
+            ] }, idx)),
+            refImages.length < 9 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: handleAddImages,
+                className: "w-16 h-16 border-2 border-dashed border-dark-600 hover:border-primary-500 rounded flex items-center justify-center text-dark-400 hover:text-primary-400 transition-colors text-2xl",
+                children: "+"
               }
             )
           ] })

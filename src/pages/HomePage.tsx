@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useProjectStore } from '../stores/project-store'
 
 export default function HomePage() {
@@ -9,16 +9,34 @@ export default function HomePage() {
   const [duration, setDuration] = useState(300)
   const [deleteTarget, setDeleteTarget] = useState<{ path: string; title: string } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [refImages, setRefImages] = useState<{ name: string; path: string }[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadProjects()
   }, [])
 
+  const handleAddImages = async () => {
+    if (!window.electronAPI) return
+    const files = await window.electronAPI.dialog.openFile([
+      { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }
+    ])
+    if (files) {
+      const paths = Array.isArray(files) ? files : [files]
+      setRefImages(prev => [...prev, ...paths.map(p => ({ name: p.split(/[/\\]/).pop() || 'image', path: p }))].slice(0, 9))
+    }
+  }
+
+  const removeImage = (idx: number) => {
+    setRefImages(prev => prev.filter((_, i) => i !== idx))
+  }
+
   const handleCreate = async () => {
     if (!title.trim()) return
-    await createProject(title.trim(), duration, style)
+    await createProject(title.trim(), duration, style, refImages.map(i => i.path))
     setShowNew(false)
     setTitle('')
+    setRefImages([])
   }
 
   const handleOpen = async () => {
@@ -119,6 +137,27 @@ export default function HomePage() {
                 />
               </div>
             </div>
+            {/* 参考素材上传 */}
+            <div>
+              <label className="block text-sm text-dark-400 mb-1">参考素材（商品外观、场景参考等，最多9张）</label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {refImages.map((img, idx) => (
+                  <div key={idx} className="relative w-16 h-16 rounded border border-dark-600 overflow-hidden group">
+                    <img src={`file:///${img.path.replace(/\\/g, '/')}`} alt={img.name} className="w-full h-full object-cover" />
+                    <button onClick={() => removeImage(idx)}
+                      className="absolute top-0 right-0 w-4 h-4 bg-red-600 text-white text-xs flex items-center justify-center rounded-bl opacity-0 group-hover:opacity-100 transition-opacity">×</button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[8px] text-white truncate px-0.5">{img.name}</div>
+                  </div>
+                ))}
+                {refImages.length < 9 && (
+                  <button onClick={handleAddImages}
+                    className="w-16 h-16 border-2 border-dashed border-dark-600 hover:border-primary-500 rounded flex items-center justify-center text-dark-400 hover:text-primary-400 transition-colors text-2xl">
+                    +
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="flex gap-3">
               <button
                 onClick={handleCreate}
