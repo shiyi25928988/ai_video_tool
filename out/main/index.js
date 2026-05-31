@@ -848,43 +848,6 @@ class ScriptOptimizer extends EventEmitter {
     return { outline, chapters };
   }
 }
-class Semaphore {
-  permits;
-  waiting = [];
-  constructor(count) {
-    if (count < 1) throw new Error("Semaphore count must be >= 1");
-    this.permits = count;
-  }
-  async run(fn) {
-    await this.acquire();
-    try {
-      return await fn();
-    } finally {
-      this.release();
-    }
-  }
-  acquire() {
-    if (this.permits > 0) {
-      this.permits--;
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => this.waiting.push(resolve));
-  }
-  release() {
-    this.permits++;
-    const next = this.waiting.shift();
-    if (next) {
-      this.permits--;
-      next();
-    }
-  }
-  get available() {
-    return this.permits;
-  }
-  get pending() {
-    return this.waiting.length;
-  }
-}
 const LEVEL_ORDER = {
   debug: 0,
   info: 1,
@@ -938,17 +901,23 @@ class Logger {
 }
 const logger = new Logger();
 class PipelineRunner extends EventEmitter {
-  constructor(projectManager2, sidecar, llmConfig, concurrency = 2, aiModelConfig2) {
+  constructor(projectManager2, sidecar, llmConfig, aiModelConfig2) {
     super();
     this.projectManager = projectManager2;
     this.sidecar = sidecar;
     this.llmConfig = llmConfig;
     this.aiModelConfig = aiModelConfig2;
-    this.concurrency = concurrency;
   }
   paused = false;
   abortController = null;
-  concurrency;
+  confirmResolve = null;
+  /** 用户确认继续下一个分镜 */
+  confirmNext() {
+    if (this.confirmResolve) {
+      this.confirmResolve();
+      this.confirmResolve = null;
+    }
+  }
   /** 运行完整 Pipeline */
   async run() {
     const project = this.projectManager.getProject();
@@ -1063,33 +1032,34 @@ class PipelineRunner extends EventEmitter {
     }
   }
   async processBatch(shots) {
-    const semaphore = new Semaphore(this.concurrency);
-    await Promise.all(shots.map(
-      (shot) => semaphore.run(async () => {
-        await this.checkPausedOrAborted();
-        shot.status = "rendering";
-        await this.projectManager.saveProject();
-        this.emit("shot:start", shot.id);
-        try {
-          await this.renderShot(shot);
-          shot.status = "done";
-        } catch (err) {
-          shot.status = "failed";
-          shot.error = err.message;
-          this.emit("shot:error", shot.id, shot.error);
-        }
-        await this.projectManager.saveProject();
-        if (shot.status === "done") {
-          this.emit("shot:done", shot.id);
-        }
-        const project = this.projectManager.getProject();
-        const total = project.pipelineState.totalShots;
-        const completed = this.countCompleted(project);
-        const failed = this.countFailed(project);
-        await this.projectManager.updatePipelineState({ completedShots: completed, failedShots: failed });
-        this.emit("shot:progress", completed, total);
-      })
-    ));
+    for (const shot of shots) {
+      await this.checkPausedOrAborted();
+      shot.status = "rendering";
+      await this.projectManager.saveProject();
+      this.emit("shot:start", shot.id);
+      try {
+        await this.renderShot(shot);
+        shot.status = "done";
+      } catch (err) {
+        shot.status = "failed";
+        shot.error = err.message;
+        this.emit("shot:error", shot.id, shot.error);
+      }
+      await this.projectManager.saveProject();
+      const project = this.projectManager.getProject();
+      const total = project.pipelineState.totalShots;
+      const completed = this.countCompleted(project);
+      const failed = this.countFailed(project);
+      await this.projectManager.updatePipelineState({ completedShots: completed, failedShots: failed });
+      this.emit("shot:progress", completed, total);
+      if (shot.status === "done") {
+        this.emit("shot:done", shot.id, shot);
+      }
+      this.emit("shot:confirm", shot);
+      await new Promise((resolve) => {
+        this.confirmResolve = resolve;
+      });
+    }
   }
   /** 渲染单个分镜 */
   async renderShot(shot) {
@@ -1771,6 +1741,7 @@ function createWindow() {
   });
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
+    if (is.dev) mainWindow?.webContents.openDevTools();
   });
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
@@ -1925,21 +1896,32 @@ function registerIPC() {
       return { ok: false, error: err.message };
     }
   });
-  ipcMain.handle("pipeline:start", async (_e, config) => {
+  let activeRunner = null;
+  ipcMain.handle("pipeline:start", async (_e, _config) => {
     const llmConfig = await llmConfigManager.getActive();
     if (!llmConfig) throw new Error("LLM not configured");
-    const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, config?.concurrency || 2, aiModelConfig);
+    const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, aiModelConfig);
+    activeRunner = runner;
     runner.on("phase:change", (phase) => mainWindow?.webContents.send("pipeline:phase", phase));
     runner.on("shot:start", (id) => mainWindow?.webContents.send("pipeline:shot-start", id));
-    runner.on("shot:done", (id) => mainWindow?.webContents.send("pipeline:shot-done", id));
+    runner.on("shot:done", (id, shot) => mainWindow?.webContents.send("pipeline:shot-done", { id, shot }));
     runner.on("shot:error", (id, err) => mainWindow?.webContents.send("pipeline:shot-error", { id, error: err }));
     runner.on("shot:progress", (done, total) => mainWindow?.webContents.send("pipeline:progress", { done, total }));
+    runner.on("shot:confirm", (shot) => mainWindow?.webContents.send("pipeline:shot-confirm", shot));
     runner.on("error", (err) => mainWindow?.webContents.send("pipeline:error", err.message));
-    runner.on("done", () => mainWindow?.webContents.send("pipeline:done"));
+    runner.on("done", () => {
+      mainWindow?.webContents.send("pipeline:done");
+      activeRunner = null;
+    });
     runner.run().catch((err) => {
       logger.error("Pipeline run error:", err.message);
+      activeRunner = null;
     });
     return { started: true };
+  });
+  ipcMain.handle("pipeline:confirm-next", () => {
+    activeRunner?.confirmNext();
+    return { ok: true };
   });
   ipcMain.handle("pipeline:pause", () => {
     return { paused: true };

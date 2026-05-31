@@ -3,17 +3,16 @@ import { ProjectManager } from './project-manager'
 import { ScriptOptimizer } from './script-optimizer/optimizer'
 import { PythonSpawner } from './python-spawner'
 import { AIModelConfigManager } from './ai-model-config'
-import { Semaphore } from './utils/semaphore'
 import { logger } from './utils/logger'
 import type { Project, ShotScript, Chapter, LLMConfig, PipelinePhase, PipelineState } from './script-optimizer/types'
 
 export interface PipelineEvents {
   'phase:change': (phase: PipelinePhase) => void
   'shot:start': (shotId: string) => void
-  'shot:done': (shotId: string) => void
+  'shot:done': (shotId: string, shot: ShotScript) => void
   'shot:error': (shotId: string, error: string) => void
   'shot:progress': (completed: number, total: number) => void
-  'provider:fallback': (info: { from: string; to?: string; error: string }) => void
+  'shot:confirm': (shot: ShotScript) => void
   'error': (error: Error) => void
   'done': () => void
 }
@@ -21,17 +20,23 @@ export interface PipelineEvents {
 export class PipelineRunner extends EventEmitter {
   private paused = false
   private abortController: AbortController | null = null
-  private concurrency: number
+  private confirmResolve: (() => void) | null = null
 
   constructor(
     private projectManager: ProjectManager,
     private sidecar: PythonSpawner,
     private llmConfig: LLMConfig,
-    concurrency: number = 2,
     private aiModelConfig?: AIModelConfigManager
   ) {
     super()
-    this.concurrency = concurrency
+  }
+
+  /** 用户确认继续下一个分镜 */
+  confirmNext(): void {
+    if (this.confirmResolve) {
+      this.confirmResolve()
+      this.confirmResolve = null
+    }
   }
 
   /** 运行完整 Pipeline */
@@ -187,39 +192,42 @@ export class PipelineRunner extends EventEmitter {
   }
 
   private async processBatch(shots: ShotScript[]): Promise<void> {
-    const semaphore = new Semaphore(this.concurrency)
+    for (const shot of shots) {
+      await this.checkPausedOrAborted()
 
-    await Promise.all(shots.map(shot =>
-      semaphore.run(async () => {
-        await this.checkPausedOrAborted()
+      shot.status = 'rendering'
+      await this.projectManager.saveProject()
+      this.emit('shot:start', shot.id)
 
-        shot.status = 'rendering'
-        await this.projectManager.saveProject()
-        this.emit('shot:start', shot.id)
+      try {
+        await this.renderShot(shot)
+        shot.status = 'done'
+      } catch (err) {
+        shot.status = 'failed'
+        shot.error = (err as Error).message
+        this.emit('shot:error', shot.id, shot.error)
+      }
 
-        try {
-          await this.renderShot(shot)
-          shot.status = 'done'
-        } catch (err) {
-          shot.status = 'failed'
-          shot.error = (err as Error).message
-          this.emit('shot:error', shot.id, shot.error)
-        }
+      await this.projectManager.saveProject()
 
-        await this.projectManager.saveProject()
+      const project = this.projectManager.getProject()!
+      const total = project.pipelineState.totalShots
+      const completed = this.countCompleted(project)
+      const failed = this.countFailed(project)
+      await this.projectManager.updatePipelineState({ completedShots: completed, failedShots: failed })
+      this.emit('shot:progress', completed, total)
 
-        if (shot.status === 'done') {
-          this.emit('shot:done', shot.id)
-        }
+      // 完成后通知前端，等待用户确认
+      if (shot.status === 'done') {
+        this.emit('shot:done', shot.id, shot)
+      }
+      this.emit('shot:confirm', shot)
 
-        const project = this.projectManager.getProject()!
-        const total = project.pipelineState.totalShots
-        const completed = this.countCompleted(project)
-        const failed = this.countFailed(project)
-        await this.projectManager.updatePipelineState({ completedShots: completed, failedShots: failed })
-        this.emit('shot:progress', completed, total)
+      // 等待用户确认后继续
+      await new Promise<void>(resolve => {
+        this.confirmResolve = resolve
       })
-    ))
+    }
   }
 
   /** 渲染单个分镜 */

@@ -748,11 +748,6 @@ export default function SettingsPage() {
           )}
         </section>
 
-        {/* 视频 Provider */}
-        <section className="bg-dark-800 border border-dark-700 rounded-xl p-6">
-          <h2 className="text-lg font-semibold mb-4">视频生成 Provider</h2>
-          <ProviderList />
-        </section>
       </div>
 
       {/* 测试确认对话框 */}
@@ -802,27 +797,3 @@ export default function SettingsPage() {
   )
 }
 
-function ProviderList() {
-  const [providers, setProviders] = useState<any[]>([])
-
-  useEffect(() => {
-    if (!api()) return
-    api()!.provider.list().then(setProviders)
-  }, [])
-
-  return (
-    <div className="space-y-3">
-      {providers.map(p => (
-        <div key={p.id} className="flex items-center justify-between p-3 bg-dark-900 rounded-lg">
-          <div>
-            <span className="font-medium text-white">{p.displayName}</span>
-            <span className="ml-2 text-xs text-dark-400">{p.id}</span>
-          </div>
-          <span className={`text-xs px-2 py-1 rounded ${p.configured ? 'bg-green-900/50 text-green-400' : 'bg-dark-700 text-dark-400'}`}>
-            {p.configured ? '已配置' : '未配置'}
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}

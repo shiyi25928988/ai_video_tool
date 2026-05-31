@@ -57,7 +57,7 @@ interface PipelineProgress {
 interface ProjectStore {
   projects: ProjectListItem[]
   currentProject: Project | null
-  activeTab: 'script' | 'characters' | 'render' | 'preview' | 'export'
+  activeTab: 'script' | 'characters' | 'render' | 'preview' | 'export' | 'test'
   scriptProgress: ScriptProgress | null
   pipelineProgress: PipelineProgress | null
   loading: boolean

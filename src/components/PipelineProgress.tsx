@@ -1,10 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useProjectStore } from '../stores/project-store'
 import type { ShotScript } from '../../electron/main/script-optimizer/types'
+
+const api = () => window.electronAPI
 
 export default function PipelineProgress() {
   const { currentProject, startPipeline, pipelineProgress, loading, error, refreshProject } = useProjectStore()
   const [previewShot, setPreviewShot] = useState<ShotScript | null>(null)
+  const [confirmShot, setConfirmShot] = useState<ShotScript | null>(null)
+
+  // 监听 shot:confirm 事件
+  useEffect(() => {
+    if (!api()) return
+    const unsub = api()!.pipeline.onShotConfirm((shot: ShotScript) => {
+      setConfirmShot(shot)
+      refreshProject()
+    })
+    return unsub
+  }, [])
+
+  const handleConfirmNext = () => {
+    setConfirmShot(null)
+    api()?.pipeline.confirmNext()
+  }
 
   if (!currentProject) return null
 
@@ -202,6 +220,47 @@ export default function PipelineProgress() {
                 {previewShot.error && (
                   <div className="text-red-400">错误：{previewShot.error}</div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 渲染确认对话框 — 每个分镜完成后弹出 */}
+        {confirmShot && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-auto">
+              <h3 className="text-lg font-semibold text-white mb-2">
+                分镜 #{confirmShot.order} 渲染{confirmShot.status === 'done' ? '完成' : '失败'}
+              </h3>
+
+              {/* 预览 */}
+              {confirmShot.status === 'done' && confirmShot.assets?.video && (
+                <video
+                  src={`file:///${confirmShot.assets.video.replace(/\\/g, '/')}`}
+                  controls autoPlay muted
+                  className="w-full rounded-lg border border-dark-600 mb-3"
+                />
+              )}
+              {confirmShot.status === 'done' && confirmShot.assets?.image && !confirmShot.assets?.video && (
+                <img
+                  src={`file:///${confirmShot.assets.image.replace(/\\/g, '/')}`}
+                  alt={confirmShot.id}
+                  className="w-full rounded-lg border border-dark-600 mb-3"
+                />
+              )}
+              {confirmShot.status === 'failed' && (
+                <div className="mb-3 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm">
+                  {confirmShot.error || '未知错误'}
+                </div>
+              )}
+
+              <p className="text-dark-400 text-sm mb-4">{confirmShot.sceneDescription}</p>
+
+              <div className="flex gap-3">
+                <button onClick={handleConfirmNext}
+                  className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-white font-medium transition-colors">
+                  继续下一个
+                </button>
               </div>
             </div>
           </div>

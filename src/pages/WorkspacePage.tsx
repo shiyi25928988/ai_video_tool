@@ -59,15 +59,16 @@ export default function WorkspacePage() {
 function CharacterManager() {
   const { currentProject } = useProjectStore()
   if (!currentProject) return null
+  const characters = currentProject.characters || []
 
   return (
     <div className="h-full overflow-auto p-6">
       <h2 className="text-xl font-semibold mb-4">角色管理</h2>
-      {currentProject.characters.length === 0 ? (
+      {characters.length === 0 ? (
         <p className="text-dark-400">暂无角色。请先在剧本编辑器中生成剧本。</p>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          {currentProject.characters.map(char => (
+          {characters.map(char => (
             <CharacterCard key={char.id} character={char} />
           ))}
         </div>

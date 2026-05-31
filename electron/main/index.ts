@@ -38,6 +38,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+    if (is.dev) mainWindow?.webContents.openDevTools()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -236,25 +237,34 @@ function registerIPC(): void {
 
   // ─ Pipeline ──────────────────────────────────────────────
 
-  ipcMain.handle('pipeline:start', async (_e, config?: { concurrency?: number }) => {
+  let activeRunner: PipelineRunner | null = null
+
+  ipcMain.handle('pipeline:start', async (_e, _config?: { concurrency?: number }) => {
     const llmConfig = await llmConfigManager.getActive()
     if (!llmConfig) throw new Error('LLM not configured')
-    const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, config?.concurrency || 2, aiModelConfig)
+    const runner = new PipelineRunner(projectManager, pythonSpawner, llmConfig, aiModelConfig)
+    activeRunner = runner
 
     runner.on('phase:change', (phase) => mainWindow?.webContents.send('pipeline:phase', phase))
     runner.on('shot:start', (id) => mainWindow?.webContents.send('pipeline:shot-start', id))
-    runner.on('shot:done', (id) => mainWindow?.webContents.send('pipeline:shot-done', id))
+    runner.on('shot:done', (id, shot) => mainWindow?.webContents.send('pipeline:shot-done', { id, shot }))
     runner.on('shot:error', (id, err) => mainWindow?.webContents.send('pipeline:shot-error', { id, error: err }))
     runner.on('shot:progress', (done, total) => mainWindow?.webContents.send('pipeline:progress', { done, total }))
+    runner.on('shot:confirm', (shot) => mainWindow?.webContents.send('pipeline:shot-confirm', shot))
     runner.on('error', (err) => mainWindow?.webContents.send('pipeline:error', err.message))
-    runner.on('done', () => mainWindow?.webContents.send('pipeline:done'))
+    runner.on('done', () => { mainWindow?.webContents.send('pipeline:done'); activeRunner = null })
 
-    // 非阻塞运行
     runner.run().catch(err => {
       logger.error('Pipeline run error:', err.message)
+      activeRunner = null
     })
 
     return { started: true }
+  })
+
+  ipcMain.handle('pipeline:confirm-next', () => {
+    activeRunner?.confirmNext()
+    return { ok: true }
   })
 
   ipcMain.handle('pipeline:pause', () => {

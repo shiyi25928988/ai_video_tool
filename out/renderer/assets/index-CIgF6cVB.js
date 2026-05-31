@@ -7366,6 +7366,7 @@ function HomePage() {
   const [style, setStyle] = reactExports.useState("anime");
   const [duration, setDuration] = reactExports.useState(300);
   const [deleteTarget, setDeleteTarget] = reactExports.useState(null);
+  const [selectedId, setSelectedId] = reactExports.useState(null);
   reactExports.useEffect(() => {
     loadProjects();
   }, []);
@@ -7499,8 +7500,14 @@ function HomePage() {
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {
-            onClick: () => openProject(p.path),
-            className: "flex-1 flex items-center justify-between p-4 bg-dark-800 hover:bg-dark-700 hover:border-yellow-500/60 border border-dark-700 rounded-lg text-left transition-colors",
+            onClick: () => {
+              if (selectedId === p.id) {
+                openProject(p.path);
+              } else {
+                setSelectedId(p.id);
+              }
+            },
+            className: `flex-1 flex items-center justify-between p-4 border rounded-lg text-left transition-all ${selectedId === p.id ? "bg-dark-700 border-yellow-500 shadow-lg shadow-yellow-500/10" : "bg-dark-800 hover:bg-dark-700 hover:border-yellow-500/60 border-dark-700"}`,
             children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium text-white", children: p.title }),
@@ -7556,6 +7563,7 @@ function HomePage() {
     ] }) })
   ] });
 }
+const api$4 = () => window.electronAPI;
 function StoryboardEditor() {
   const { currentProject, generateScript, loading, scriptProgress, error } = useProjectStore();
   const [userInput, setUserInput] = reactExports.useState("");
@@ -7613,7 +7621,7 @@ function StoryboardEditor() {
           i
         ))
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-auto p-6", children: chapters[selectedChapter] && /* @__PURE__ */ jsxRuntimeExports.jsx(ChapterDetail, { chapter: chapters[selectedChapter] }) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 overflow-auto p-6", children: chapters[selectedChapter] && /* @__PURE__ */ jsxRuntimeExports.jsx(ChapterDetail, { chapter: chapters[selectedChapter], chapterIndex: selectedChapter }) })
     ] })
   ] });
 }
@@ -7628,13 +7636,12 @@ function ScriptProgressStepper({ progress }) {
     const isDone = progress.layer > layer.id || progress.layer === layer.id && progress.status === "done";
     const isActive = progress.layer === layer.id && progress.status === "start";
     const isError = progress.layer === layer.id && progress.status === "error";
-    progress.layer < layer.id;
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${isDone ? "bg-green-600 text-white" : isActive ? "bg-primary-600 text-white animate-pulse" : isError ? "bg-red-600 text-white" : "bg-dark-700 text-dark-500"}`, children: isDone ? "✓" : isError ? "✗" : layer.id }),
         i < LAYER_INFO.length - 1 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `w-0.5 flex-1 min-h-[24px] ${isDone ? "bg-green-600" : "bg-dark-700"}` })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `pb-4 ${i < LAYER_INFO.length - 1 ? "" : ""}`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pb-4", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `text-sm font-medium ${isDone ? "text-green-400" : isActive ? "text-primary-400" : isError ? "text-red-400" : "text-dark-500"}`, children: layer.label }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `text-xs mt-0.5 ${isActive ? "text-dark-300" : "text-dark-500"}`, children: isDone && progress.layer === layer.id && progress.message ? progress.message : isActive ? progress.message || layer.desc + "..." : isError ? progress.message || "生成失败" : layer.desc }),
         isDone && progress.layer === layer.id && progress.data && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 text-xs space-y-0.5", children: [
@@ -7665,11 +7672,54 @@ function ScriptProgressStepper({ progress }) {
     ] }, layer.id);
   }) });
 }
-function ChapterDetail({ chapter }) {
+function ChapterDetail({ chapter, chapterIndex }) {
+  const { refreshProject } = useProjectStore();
+  const [editingTitle, setEditingTitle] = reactExports.useState(false);
+  const [titleValue, setTitleValue] = reactExports.useState(chapter.title);
+  const [summaryValue, setSummaryValue] = reactExports.useState(chapter.summary);
+  const saveChapter = async () => {
+    if (!api$4() || !window.electronAPI) return;
+    const proj = await window.electronAPI.project.get();
+    const chapters = proj.script.chapters.map((ch, i) => {
+      if (i !== chapterIndex) return ch;
+      return { ...ch, title: titleValue, summary: summaryValue };
+    });
+    await window.electronAPI.project.update({ script: { chapters } });
+    await refreshProject();
+    setEditingTitle(false);
+  };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold", children: chapter.title }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mt-1", children: chapter.summary }),
+      editingTitle ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            value: titleValue,
+            onChange: (e) => setTitleValue(e.target.value),
+            className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-lg font-semibold focus:outline-none focus:border-primary-500"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "textarea",
+          {
+            value: summaryValue,
+            onChange: (e) => setSummaryValue(e.target.value),
+            rows: 2,
+            className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-dark-300 text-sm focus:outline-none focus:border-primary-500 resize-none"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: saveChapter, className: "px-3 py-1 text-xs bg-primary-600 hover:bg-primary-700 rounded text-white", children: "保存" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setEditingTitle(false), className: "px-3 py-1 text-xs bg-dark-700 hover:bg-dark-600 rounded text-dark-300", children: "取消" })
+        ] })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { onClick: () => setEditingTitle(true), className: "cursor-pointer group", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-semibold group-hover:text-primary-400 transition-colors", children: [
+          chapter.title,
+          " ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-dark-500", children: "点击编辑" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mt-1", children: chapter.summary })
+      ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 mt-2 text-xs text-dark-500", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
           "情绪弧: ",
@@ -7686,11 +7736,17 @@ function ChapterDetail({ chapter }) {
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: chapter.shots.map((shot, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(ShotCard, { shot, index: i }, shot.id)) })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: chapter.shots.map((shot, i) => /* @__PURE__ */ jsxRuntimeExports.jsx(ShotCard, { shot, index: i, chapterIndex, shotIndex: i }, shot.id)) })
   ] });
 }
-function ShotCard({ shot, index }) {
+function ShotCard({ shot, index, chapterIndex, shotIndex }) {
+  const { refreshProject } = useProjectStore();
   const [expanded, setExpanded] = reactExports.useState(false);
+  const [editing, setEditing] = reactExports.useState(false);
+  const [sceneDesc, setSceneDesc] = reactExports.useState(shot.sceneDescription || "");
+  const [duration, setDuration] = reactExports.useState(shot.durationSec || 5);
+  const [dialogueText, setDialogueText] = reactExports.useState((shot.dialogue || []).map((d) => `${d.characterId}: ${d.text}`).join("\n"));
+  const [narration, setNarration] = reactExports.useState(shot.narration || "");
   const statusColor = {
     pending: "bg-dark-600 text-dark-300",
     rendering: "bg-yellow-900/50 text-yellow-400",
@@ -7705,6 +7761,61 @@ function ShotCard({ shot, index }) {
     establishing: "定场",
     reaction: "反应",
     montage: "蒙太奇"
+  };
+  const saveShot = async () => {
+    if (!window.electronAPI) return;
+    const proj = await window.electronAPI.project.get();
+    const chapters = proj.script.chapters.map((ch, ci) => {
+      if (ci !== chapterIndex) return ch;
+      return {
+        ...ch,
+        shots: ch.shots.map((s, si) => {
+          if (si !== shotIndex) return s;
+          const dialogue = dialogueText.split("\n").filter((l) => l.trim()).map((line) => {
+            const colonIdx = line.indexOf(":");
+            if (colonIdx > 0) {
+              return { characterId: line.slice(0, colonIdx).trim(), text: line.slice(colonIdx + 1).trim(), tone: "neutral" };
+            }
+            return { characterId: "", text: line.trim(), tone: "neutral" };
+          });
+          return {
+            ...s,
+            sceneDescription: sceneDesc,
+            durationSec: duration,
+            narration: narration || void 0,
+            dialogue,
+            imagePrompt: void 0
+            // 重置提示词，需要重新组装
+          };
+        })
+      };
+    });
+    await window.electronAPI.project.update({ script: { chapters } });
+    await refreshProject();
+    setEditing(false);
+  };
+  const uploadImage = async (imageType) => {
+    if (!window.electronAPI) return;
+    const filePath = await window.electronAPI.dialog.openFile([{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp"] }]);
+    if (!filePath) return;
+    const proj = await window.electronAPI.project.get();
+    const projPath = proj.path || "";
+    `${projPath}/shots/${shot.id}`;
+    const chapters = proj.script.chapters.map((ch, ci) => {
+      if (ci !== chapterIndex) return ch;
+      return {
+        ...ch,
+        shots: ch.shots.map((s, si) => {
+          if (si !== shotIndex) return s;
+          const assets = { ...s.assets };
+          if (imageType === "scene") assets.sceneImage = filePath.replace(/\\/g, "/");
+          if (imageType === "prop") assets.propImage = filePath.replace(/\\/g, "/");
+          return { ...s, assets };
+        })
+      };
+    });
+    await window.electronAPI.project.update({ script: { chapters } });
+    await refreshProject();
   };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-700 rounded-lg overflow-hidden", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -7728,13 +7839,55 @@ function ShotCard({ shot, index }) {
       }
     ),
     expanded && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "px-4 pb-4 space-y-3 border-t border-dark-700", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pt-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-400", children: "场景描述" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-200 mt-1", children: shot.sceneDescription })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-2 pt-3", children: !editing ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => setEditing(true), className: "px-3 py-1 text-xs bg-dark-700 hover:bg-dark-600 rounded text-dark-300 transition-colors", children: "编辑" }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: saveShot, className: "px-3 py-1 text-xs bg-primary-600 hover:bg-primary-700 rounded text-white", children: "保存" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { onClick: () => {
+          setEditing(false);
+          setSceneDesc(shot.sceneDescription);
+          setDuration(shot.durationSec);
+        }, className: "px-3 py-1 text-xs bg-dark-700 hover:bg-dark-600 rounded text-dark-300", children: "取消" })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-400 mb-1", children: "场景描述" }),
+        editing ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "textarea",
+          {
+            value: sceneDesc,
+            onChange: (e) => setSceneDesc(e.target.value),
+            rows: 3,
+            className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500 resize-none"
+          }
+        ) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-200", children: shot.sceneDescription })
       ] }),
-      shot.dialogue.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-400", children: "台词" }),
-        shot.dialogue.map((d, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 text-sm", children: [
+      editing && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-400 mb-1", children: "时长 (秒)" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "number",
+            value: duration,
+            onChange: (e) => setDuration(Number(e.target.value)),
+            min: 1,
+            max: 60,
+            className: "w-24 px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-dark-400 mb-1", children: [
+          "台词 ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-dark-500", children: "(格式: 角色名: 台词内容)" })
+        ] }),
+        editing ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "textarea",
+          {
+            value: dialogueText,
+            onChange: (e) => setDialogueText(e.target.value),
+            rows: 3,
+            placeholder: "角色名: 台词内容",
+            className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500 resize-none"
+          }
+        ) : (shot.dialogue || []).length > 0 ? (shot.dialogue || []).map((d, i) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 text-sm", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-primary-400", children: [
             d.characterId,
             ":"
@@ -7746,7 +7899,19 @@ function ShotCard({ shot, index }) {
             d.tone,
             ")"
           ] })
-        ] }, i))
+        ] }, i)) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-500", children: "无台词" })
+      ] }),
+      editing && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-400 mb-1", children: "旁白" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "textarea",
+          {
+            value: narration,
+            onChange: (e) => setNarration(e.target.value),
+            rows: 2,
+            className: "w-full px-3 py-2 bg-dark-900 border border-dark-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500 resize-none"
+          }
+        )
       ] }),
       shot.camera && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-400", children: "镜头" }),
@@ -7761,19 +7926,45 @@ function ShotCard({ shot, index }) {
       shot.imagePrompt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-dark-400", children: "SD Prompt" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-dark-300 mt-1 font-mono bg-dark-900 p-2 rounded max-h-32 overflow-auto", children: shot.imagePrompt.positive })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3 pt-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => uploadImage("scene"),
+            className: "px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 rounded text-dark-300 transition-colors",
+            children: "📷 上传场景图"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            onClick: () => uploadImage("prop"),
+            className: "px-3 py-1.5 text-xs bg-dark-700 hover:bg-dark-600 rounded text-dark-300 transition-colors",
+            children: "🎒 上传道具图"
+          }
+        )
+      ] }),
+      shot.assets?.sceneImage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-dark-500 mb-1", children: "场景图" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: `file:///${shot.assets.sceneImage}`, alt: "scene", className: "w-32 h-20 object-cover rounded border border-dark-600" })
+      ] }),
+      shot.assets?.propImage && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-dark-500 mb-1", children: "道具图" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: `file:///${shot.assets.propImage}`, alt: "prop", className: "w-32 h-20 object-cover rounded border border-dark-600" })
       ] })
     ] })
   ] });
 }
-const api$2 = () => window.electronAPI;
+const api$3 = () => window.electronAPI;
 function CharacterCard({ character }) {
   const d = character.appearanceDetail;
   const { refreshProject } = useProjectStore();
   const [generating, setGenerating] = reactExports.useState(false);
   const [imageSrc, setImageSrc] = reactExports.useState(null);
   reactExports.useEffect(() => {
-    if (character.referenceImage && api$2()) {
-      api$2().project.get().then((proj) => {
+    if (character.referenceImage && api$3()) {
+      api$3().project.get().then((proj) => {
         const char = proj?.characters?.find((c) => c.id === character.id);
         if (char?.imageDataUrl) {
           setImageSrc(char.imageDataUrl);
@@ -7794,11 +7985,11 @@ function CharacterCard({ character }) {
     return `portrait of ${parts.join(", ")}, high quality, detailed face, anime style`;
   };
   const generateImage = async () => {
-    if (!api$2()) return;
+    if (!api$3()) return;
     setGenerating(true);
     try {
       const prompt = buildPrompt();
-      const result = await api$2().sidecar.generateImage({
+      const result = await api$3().sidecar.generateImage({
         prompt,
         characterId: character.id
       });
@@ -7806,8 +7997,8 @@ function CharacterCard({ character }) {
         if (result.dataUrl) {
           setImageSrc(result.dataUrl);
         }
-        const proj = await api$2().project.get();
-        await api$2().project.update({
+        const proj = await api$3().project.get();
+        await api$3().project.update({
           characters: proj.characters.map(
             (c) => c.id === character.id ? { ...c, referenceImage: result.path, imageDataUrl: result.dataUrl } : c
           )
@@ -7866,9 +8057,23 @@ function CharacterCard({ character }) {
     ] })
   ] });
 }
+const api$2 = () => window.electronAPI;
 function PipelineProgress() {
   const { currentProject, startPipeline, pipelineProgress, loading, error, refreshProject } = useProjectStore();
   const [previewShot, setPreviewShot] = reactExports.useState(null);
+  const [confirmShot, setConfirmShot] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    if (!api$2()) return;
+    const unsub = api$2().pipeline.onShotConfirm((shot) => {
+      setConfirmShot(shot);
+      refreshProject();
+    });
+    return unsub;
+  }, []);
+  const handleConfirmNext = () => {
+    setConfirmShot(null);
+    api$2()?.pipeline.confirmNext();
+  };
   if (!currentProject) return null;
   const state = currentProject.pipelineState;
   const total = state.totalShots;
@@ -8031,6 +8236,42 @@ function PipelineProgress() {
           previewShot.error
         ] })
       ] })
+    ] }) }),
+    confirmShot && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-black/70 flex items-center justify-center z-50", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-auto", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-lg font-semibold text-white mb-2", children: [
+        "分镜 #",
+        confirmShot.order,
+        " 渲染",
+        confirmShot.status === "done" ? "完成" : "失败"
+      ] }),
+      confirmShot.status === "done" && confirmShot.assets?.video && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "video",
+        {
+          src: `file:///${confirmShot.assets.video.replace(/\\/g, "/")}`,
+          controls: true,
+          autoPlay: true,
+          muted: true,
+          className: "w-full rounded-lg border border-dark-600 mb-3"
+        }
+      ),
+      confirmShot.status === "done" && confirmShot.assets?.image && !confirmShot.assets?.video && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "img",
+        {
+          src: `file:///${confirmShot.assets.image.replace(/\\/g, "/")}`,
+          alt: confirmShot.id,
+          className: "w-full rounded-lg border border-dark-600 mb-3"
+        }
+      ),
+      confirmShot.status === "failed" && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-3 p-3 bg-red-900/30 border border-red-700 rounded-lg text-red-300 text-sm", children: confirmShot.error || "未知错误" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400 text-sm mb-4", children: confirmShot.sceneDescription }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          onClick: handleConfirmNext,
+          className: "flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 rounded-lg text-white font-medium transition-colors",
+          children: "继续下一个"
+        }
+      ) })
     ] }) })
   ] }) });
 }
@@ -8070,9 +8311,10 @@ function WorkspacePage() {
 function CharacterManager() {
   const { currentProject } = useProjectStore();
   if (!currentProject) return null;
+  const characters = currentProject.characters || [];
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "h-full overflow-auto p-6", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold mb-4", children: "角色管理" }),
-    currentProject.characters.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400", children: "暂无角色。请先在剧本编辑器中生成剧本。" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 lg:grid-cols-3 gap-4", children: currentProject.characters.map((char) => /* @__PURE__ */ jsxRuntimeExports.jsx(CharacterCard, { character: char }, char.id)) })
+    characters.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-dark-400", children: "暂无角色。请先在剧本编辑器中生成剧本。" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 lg:grid-cols-3 gap-4", children: characters.map((char) => /* @__PURE__ */ jsxRuntimeExports.jsx(CharacterCard, { character: char }, char.id)) })
   ] });
 }
 function PreviewPanel() {
@@ -9016,10 +9258,6 @@ GPU: ${result.gpu ? "是" : "否"}`);
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-white", children: ffmpegStatus })
         ] }),
         ffmpegStatus === "未安装" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-yellow-400 text-sm mt-2", children: "请安装 FFmpeg 并加入系统 PATH，或在下方指定路径。" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "bg-dark-800 border border-dark-700 rounded-xl p-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold mb-4", children: "视频生成 Provider" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ProviderList, {})
       ] })
     ] }),
     aiTestConfirm && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 bg-black/60 flex items-center justify-center z-50", onClick: () => setAiTestConfirm(null), children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-dark-800 border border-dark-600 rounded-xl p-6 max-w-sm w-full mx-4", onClick: (e) => e.stopPropagation(), children: [
@@ -9069,20 +9307,6 @@ GPU: ${result.gpu ? "是" : "否"}`);
       ] })
     ] }) })
   ] });
-}
-function ProviderList() {
-  const [providers, setProviders] = reactExports.useState([]);
-  reactExports.useEffect(() => {
-    if (!api()) return;
-    api().provider.list().then(setProviders);
-  }, []);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: providers.map((p) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between p-3 bg-dark-900 rounded-lg", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-white", children: p.displayName }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 text-xs text-dark-400", children: p.id })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `text-xs px-2 py-1 rounded ${p.configured ? "bg-green-900/50 text-green-400" : "bg-dark-700 text-dark-400"}`, children: p.configured ? "已配置" : "未配置" })
-  ] }, p.id)) });
 }
 function App() {
   const [currentView, setCurrentView] = reactExports.useState("home");

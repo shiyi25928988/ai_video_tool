@@ -8,6 +8,7 @@ export default function HomePage() {
   const [style, setStyle] = useState('anime')
   const [duration, setDuration] = useState(300)
   const [deleteTarget, setDeleteTarget] = useState<{ path: string; title: string } | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   useEffect(() => {
     loadProjects()
@@ -145,8 +146,18 @@ export default function HomePage() {
             {projects.map(p => (
               <div key={p.id} className="flex items-center gap-2 group">
                 <button
-                  onClick={() => openProject(p.path)}
-                  className="flex-1 flex items-center justify-between p-4 bg-dark-800 hover:bg-dark-700 hover:border-yellow-500/60 border border-dark-700 rounded-lg text-left transition-colors"
+                  onClick={() => {
+                    if (selectedId === p.id) {
+                      openProject(p.path)
+                    } else {
+                      setSelectedId(p.id)
+                    }
+                  }}
+                  className={`flex-1 flex items-center justify-between p-4 border rounded-lg text-left transition-all ${
+                    selectedId === p.id
+                      ? 'bg-dark-700 border-yellow-500 shadow-lg shadow-yellow-500/10'
+                      : 'bg-dark-800 hover:bg-dark-700 hover:border-yellow-500/60 border-dark-700'
+                  }`}
                 >
                   <div>
                     <div className="font-medium text-white">{p.title}</div>

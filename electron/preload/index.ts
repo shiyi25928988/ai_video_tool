@@ -60,6 +60,7 @@ const electronAPI = {
   pipeline: {
     start: (config?: { concurrency?: number }) =>
       ipcRenderer.invoke('pipeline:start', config),
+    confirmNext: () => ipcRenderer.invoke('pipeline:confirm-next'),
     pause: () => ipcRenderer.invoke('pipeline:pause'),
     resume: () => ipcRenderer.invoke('pipeline:resume'),
     onPhase: (callback: (phase: string) => void) => {
@@ -95,6 +96,11 @@ const electronAPI = {
       const handler = (_e: Electron.IpcRendererEvent, err: string) => callback(err)
       ipcRenderer.on('pipeline:error', handler)
       return () => ipcRenderer.removeListener('pipeline:error', handler)
+    },
+    onShotConfirm: (callback: (shot: any) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, shot: any) => callback(shot)
+      ipcRenderer.on('pipeline:shot-confirm', handler)
+      return () => ipcRenderer.removeListener('pipeline:shot-confirm', handler)
     },
   },
 
