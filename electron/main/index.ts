@@ -28,6 +28,7 @@ function createWindow(): void {
     minHeight: 700,
     show: false,
     title: 'Video AI Studio',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
@@ -35,6 +36,8 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+
+  mainWindow.setMenu(null)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
